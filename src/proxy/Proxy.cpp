@@ -104,6 +104,8 @@ void Proxy::launch() {
                     if (poll_fd.revents & POLLIN) {
                         try_accept_client();
                     }
+                } else if (cur_sock->type == SERVER) {
+                    //TODO implement
                 }
             }
         }
@@ -124,13 +126,9 @@ void Proxy::remove_client(int socket) {
 void Proxy::insert_socket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type) {
     auto sock = new Socket(new_socket, sockAddr, sockLen, type);
     sockets.insert(std::pair<int, Socket *>(new_socket, sock));
-    if (type == CLIENT) {
-        socketHandlers.insert(std::pair<int, SocketHandler *>(new_socket, new SocketHandler(new_socket, *casher)));
-        log.deb(TAG, "New SocketHandler for socket " + std::to_string(new_socket) + " created");
-    } else if (type == SERVER) {
-//        serverHandlers.insert(std::pair<int, ServerHandler*>(new_socket, new ServerHandler(new_socket, casher)));
-        log.deb(TAG, "New ServerHandler for socket " + std::to_string(new_socket) + " created");
-    }
+    socketHandlers.insert(
+            std::pair<int, SocketHandler *>(new_socket, new SocketHandler(new_socket, *casher, poll_fds)));
+    log.deb(TAG, "New SocketHandler for socket " + std::to_string(new_socket) + " created");
     poll_fds.push_back(initialize_pollfd(new_socket));
     log.deb(TAG, "Pushed " + std::to_string(new_socket) + " to pollfd vector");
 }

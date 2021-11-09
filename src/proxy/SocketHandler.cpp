@@ -3,13 +3,23 @@
 #include "proxy/SocketHandler.h"
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <vector>
+#include <netdb.h>
+#include <cstring>
 
 #define TAG "cash_handler"
 
-SocketHandler::SocketHandler(int sockfd, Casher &casher) : casher(casher), client_socket(sockfd),
-                                                           log(*new Logger(Constants::DEBUG, std::cout)),
-                                                           type(STANDBY), last_was_value(false), req_in_process(false),
-                                                           req_ready(false) {
+SocketHandler::SocketHandler(int sockfd, Casher &casher, std::vector<pollfd> &pfds_ref) : casher(casher),
+                                                                                          client_socket(sockfd),
+                                                                                          log(*new Logger(
+                                                                                                  Constants::DEBUG,
+                                                                                                  std::cout)),
+                                                                                          type(STANDBY),
+                                                                                          last_was_value(false),
+                                                                                          req_in_process(false),
+                                                                                          req_ready(false),
+                                                                                          req_sent(false),
+                                                                                          poll_fds_ref(pfds_ref) {
     init_parser();
     req_buf = static_cast<char *>(malloc(req_buf_capacity));
 }
@@ -26,18 +36,18 @@ void SocketHandler::init_parser() {
 }
 
 int SocketHandler::url_callback(http_parser *parser, const char *at, size_t length) {
-    std::cout << "Callback triggered : " << "URL" << std::endl;
+//    std::cout << "Callback triggered : " << "URL" << std::endl;
     auto sh = static_cast<SocketHandler *>(parser->data);
     sh->url.append(at, length);
     return 0;
 }
 
 int SocketHandler::header_field_callback(http_parser *parser, const char *at, size_t length) {
-    std::cout << "Callback triggered : " << "H FIELD" << std::endl;
+//    std::cout << "Callback triggered : " << "H FIELD" << std::endl;
     auto sh = static_cast<SocketHandler *>(parser->data);
     if (sh->last_was_value) {
-        std::cout << "Inserting new header : " << "[" << sh->cur_header_field << "]" << "[" << sh->cur_header_value << "]"
-                  << std::endl;
+//        std::cout << "Inserting new header : " << "[" << sh->cur_header_field << "]" << "[" << sh->cur_header_value << "]"
+//                  << std::endl;
         sh->headers.insert(std::pair<std::string, std::string>(sh->cur_header_field, sh->cur_header_value));
 
         sh->cur_header_field.clear();
@@ -45,7 +55,7 @@ int SocketHandler::header_field_callback(http_parser *parser, const char *at, si
 
         sh->cur_header_field.append(at, length);
     } else {
-        if(!sh->cur_header_value.empty()) {
+        if (!sh->cur_header_value.empty()) {
             return 1;
         }
 
@@ -56,10 +66,10 @@ int SocketHandler::header_field_callback(http_parser *parser, const char *at, si
 }
 
 int SocketHandler::header_value_callback(http_parser *parser, const char *at, size_t length) {
-    std::cout << "Callback triggered : " << "H VAL" << std::endl;
+//    std::cout << "Callback triggered : " << "H VAL" << std::endl;
     auto sh = static_cast<SocketHandler *>(parser->data);
     if (!sh->last_was_value) {
-        if(!sh->cur_header_value.empty()) {
+        if (!sh->cur_header_value.empty()) {
             return 1;
         }
 
@@ -73,12 +83,11 @@ int SocketHandler::header_value_callback(http_parser *parser, const char *at, si
 }
 
 int SocketHandler::headers_complete_callback(http_parser *parser) {
-    std::cout << "Callback triggered : " << "H COMP" << std::endl;
+//    std::cout << "Callback triggered : " << "H COMP" << std::endl;
     auto sh = static_cast<SocketHandler *>(parser->data);
     sh->req_ready = true;
     return 0;
 }
-
 
 bool SocketHandler::receive_request_data() {
     log.deb(TAG, "Receiving request from " + std::to_string(client_socket));
@@ -100,8 +109,47 @@ bool SocketHandler::receive_request_data() {
         log.err(TAG, "Error parsing request from " + std::to_string(client_socket));
         return false;
     }
-    //TODO maybe need to pass 0 to parser
     return true;
+}
+
+bool SocketHandler::acquire_handler_type() {
+    if (url.empty()) {
+        log.err(TAG, "Error acquiring handler type");
+        return false;
+    }
+    if (casher.is_cashed(url)) {
+        type = CASH;
+    } else {
+        type = LOAD;
+    }
+}
+
+bool SocketHandler::connect_to_server() {
+    addrinfo* ailist;
+    addrinfo hint{};
+    bzero(&hint, sizeof(hint));
+    hint.ai_socktype = SOCK_STREAM;
+    hint.ai_family = AF_INET;
+
+    if(getaddrinfo(url.data(), NULL, &hint, &ailist)) {
+        log.err(TAG, "Error getting server address data");
+    }
+
+    for(auto aip = ailist; aip != NULL; aip = aip->ai_next) {
+        //TODO implement
+    }
+}
+
+bool SocketHandler::send_request() {
+
+}
+
+bool SocketHandler::receive_response() {
+    if(type == LOAD) {
+        //TODO
+    } else if (type == CASH) {
+        //TODO
+    }
 }
 
 bool SocketHandler::work(short revents) {
@@ -115,9 +163,25 @@ bool SocketHandler::work(short revents) {
         }
     }
 
-    if (revents & POLLOUT) {
-        //TODO implement
+    if (req_ready) {
+        if (type == STANDBY) {
+            if (!acquire_handler_type()) {
+                return false;
+            }
+            if(type == LOAD) {
+                send_request();
+            } else {
+                receive_response();
+            }
+        }
     }
+//    if (revents & POLLOUT) {
+//        //TODO implement
+//    }
 
     return true;
 }
+
+
+
+

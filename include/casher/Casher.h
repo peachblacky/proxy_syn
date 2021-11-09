@@ -21,7 +21,7 @@
     class Casher
     {
     private:
-        std::map<std::string, CashedPage*> pages;
+        std::map<std::string, CashedPage*> pages; //url-page_in_cash
 
     public:
         bool is_cashed(std::string url);
