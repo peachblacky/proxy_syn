@@ -6,6 +6,10 @@
 
 enum HandlerType {CASH, LOAD, STANDBY};
 
+//typedef struct {
+//
+//} request_data;
+
 class SocketHandler {
 private:
     HandlerType type;
@@ -29,7 +33,7 @@ private:
     Logger log;
 
     //State variables
-    bool req_coming;
+    bool req_in_process;
     bool req_ready;
     bool last_was_value;
 
@@ -37,10 +41,10 @@ private:
     http_parser* parser;
     http_parser_settings* settings;
 
-    int url_callback(http_parser* parser, const char *at, size_t length);
-    int header_field_callback(http_parser* parser, const char *at, size_t length);
-    int header_value_callback(http_parser* parser, const char *at, size_t length);
-    int headers_complete_callback(http_parser* parser);
+    static int url_callback(http_parser* parser, const char *at, size_t length);
+    static int header_field_callback(http_parser* parser, const char *at, size_t length);
+    static int header_value_callback(http_parser* parser, const char *at, size_t length);
+    static int headers_complete_callback(http_parser* parser);
 
     void init_parser();
     bool receive_request_data();

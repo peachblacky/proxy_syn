@@ -8,8 +8,8 @@
 
 SocketHandler::SocketHandler(int sockfd, Casher &casher) : casher(casher), client_socket(sockfd),
                                                            log(*new Logger(Constants::DEBUG, std::cout)),
-                                                           type(STANDBY), last_was_value(false), req_coming(false),
-                                                           req_ready(0) {
+                                                           type(STANDBY), last_was_value(false), req_in_process(false),
+                                                           req_ready(false) {
     init_parser();
     req_buf = static_cast<char *>(malloc(req_buf_capacity));
 }
@@ -27,30 +27,55 @@ void SocketHandler::init_parser() {
 
 int SocketHandler::url_callback(http_parser *parser, const char *at, size_t length) {
     std::cout << "Callback triggered : " << "URL" << std::endl;
-
+    auto sh = static_cast<SocketHandler *>(parser->data);
+    sh->url.append(at, length);
     return 0;
 }
 
 int SocketHandler::header_field_callback(http_parser *parser, const char *at, size_t length) {
     std::cout << "Callback triggered : " << "H FIELD" << std::endl;
-    if(last_was_value) {
-        headers.insert(std::pair<std::string, std::string>(cur_header_field, cur_header_value));
-        headers
+    auto sh = static_cast<SocketHandler *>(parser->data);
+    if (sh->last_was_value) {
+        std::cout << "Inserting new header : " << "[" << sh->cur_header_field << "]" << "[" << sh->cur_header_value << "]"
+                  << std::endl;
+        sh->headers.insert(std::pair<std::string, std::string>(sh->cur_header_field, sh->cur_header_value));
+
+        sh->cur_header_field.clear();
+        sh->cur_header_value.clear();
+
+        sh->cur_header_field.append(at, length);
     } else {
+        if(!sh->cur_header_value.empty()) {
+            return 1;
+        }
 
+        sh->cur_header_field.append(at, length);
     }
-
+    sh->last_was_value = false;
     return 0;
 }
 
 int SocketHandler::header_value_callback(http_parser *parser, const char *at, size_t length) {
     std::cout << "Callback triggered : " << "H VAL" << std::endl;
+    auto sh = static_cast<SocketHandler *>(parser->data);
+    if (!sh->last_was_value) {
+        if(!sh->cur_header_value.empty()) {
+            return 1;
+        }
+
+        sh->cur_header_value.append(at, length);
+    } else {
+
+        sh->cur_header_field.append(at, length);
+    }
+    sh->last_was_value = true;
     return 0;
 }
 
 int SocketHandler::headers_complete_callback(http_parser *parser) {
     std::cout << "Callback triggered : " << "H COMP" << std::endl;
-    req_ready = true;
+    auto sh = static_cast<SocketHandler *>(parser->data);
+    sh->req_ready = true;
     return 0;
 }
 
@@ -66,13 +91,16 @@ bool SocketHandler::receive_request_data() {
         return false;
     }
 
-    int nparsed = http_parser_execute(parser, settings, req_buf + req_buf_len, recved);
+    req_in_process = true;
+
+    parser->data = this;
+
+    size_t nparsed = http_parser_execute(parser, settings, req_buf + req_buf_len, recved);
     if (nparsed != recved) {
-        log.err(TAG, "Error parsing request");
+        log.err(TAG, "Error parsing request from " + std::to_string(client_socket));
         return false;
     }
     //TODO maybe need to pass 0 to parser
-    //TODO implement parsing
     return true;
 }
 
