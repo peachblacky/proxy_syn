@@ -3,6 +3,7 @@
 #include <casher/Casher.h>
 #include "logger.hpp"
 #include "http_parser/http_parser.h"
+#include <vector>
 
 enum HandlerType {
     CASH, LOAD, STANDBY
@@ -45,6 +46,7 @@ private:
     //Parser
     http_parser *parser;
     http_parser_settings *settings;
+    http_parser_url* parsed_url;
 
     static int url_callback(http_parser *parser, const char *at, size_t length);
 
@@ -72,5 +74,7 @@ public:
     int write_data();
 
     SocketHandler(int sockfd, Casher &casher, std::vector<pollfd> &pfds_ref);
+
+    virtual ~SocketHandler();
 
 };

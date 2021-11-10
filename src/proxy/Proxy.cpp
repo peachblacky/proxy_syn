@@ -117,6 +117,7 @@ void Proxy::remove_client(int socket) {
     while (it->fd != socket) it++;
     poll_fds.erase(it);
     sockets.erase(socket);
+    delete socketHandlers.at(socket);
     socketHandlers.erase(socket);
     close(socket);
     //TODO implement transfer of duty if the socket was SERVER
