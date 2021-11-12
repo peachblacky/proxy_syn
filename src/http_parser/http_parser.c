@@ -140,7 +140,7 @@ do {                                                                 \
   }                                                                  \
 } while (0)
 
-/* Don't allow the total size of the HTTP headers (including the status
+/* Don't allow the total size of the HTTP req_headers (including the status
  * line) to exceed max_header_size.  This check is here to protect
  * embedders against denial-of-service attacks where the attacker feeds
  * us a never-ending header that the embedder keeps buffering.
@@ -479,7 +479,7 @@ static struct {
 
 int http_message_needs_eof(const http_parser *parser);
 
-/* Our URL parser.
+/* Our URL req_parser.
  *
  * This is designed to be shared by http_parser_execute() for URL validation,
  * hence it has a state transition + byte-for-byte interface. In addition, it
@@ -720,7 +720,7 @@ reexecute:
 
       case s_dead:
         /* this state is used after a 'Connection: close' message
-         * the parser will error out if it reads another message
+         * the req_parser will error out if it reads another message
          */
         if (LIKELY(ch == CR || ch == LF))
           break;
@@ -1212,7 +1212,7 @@ reexecute:
 
         if (ch == LF) {
           /* they might be just sending \n instead of \r\n so this would be
-           * the second \n to denote the end of headers*/
+           * the second \n to denote the end of req_headers*/
           UPDATE_STATE(s_headers_almost_done);
           REEXECUTE();
         }
@@ -2155,7 +2155,7 @@ error:
 }
 
 
-/* Does the parser need to see an EOF to find the end of the message? */
+/* Does the req_parser need to see an EOF to find the end of the message? */
 int
 http_message_needs_eof (const http_parser *parser)
 {
@@ -2544,7 +2544,7 @@ http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
 
 void
 http_parser_pause(http_parser *parser, int paused) {
-  /* Users should only be pausing/unpausing a parser that is not in an error
+  /* Users should only be pausing/unpausing a req_parser that is not in an error
    * state. In non-debug builds, there's not much that we can do about this
    * other than ignore it.
    */
@@ -2553,7 +2553,7 @@ http_parser_pause(http_parser *parser, int paused) {
     uint32_t nread = parser->nread; /* used by the SET_ERRNO macro */
     SET_ERRNO((paused) ? HPE_PAUSED : HPE_OK);
   } else {
-    assert(0 && "Attempting to pause parser in error state");
+    assert(0 && "Attempting to pause req_parser in error state");
   }
 }
 

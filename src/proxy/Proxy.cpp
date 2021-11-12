@@ -1,14 +1,17 @@
 #include "proxy/Proxy.h"
-#include <iostream>
 #include <cstring>
 #include <fcntl.h>
 
 #define TAG "proxy"
 
-pollfd Proxy::initialize_pollfd(int fd) {
+pollfd Proxy::initialize_pollfd(int fd, SocketType type) {
     pollfd new_pollfd{};
     new_pollfd.fd = fd;
-    new_pollfd.events = POLLIN | POLLOUT;
+    if (type == ACCEPTING) {
+        new_pollfd.events = POLLIN;
+    } else {
+        new_pollfd.events = POLLIN | POLLOUT;
+    }
     return new_pollfd;
 }
 
@@ -45,15 +48,17 @@ void Proxy::start_listening_mode() {
     }
 }
 
-void Proxy::try_accept_client() {
+bool Proxy::try_accept_client() {
     int flags_bu = fcntl(client_accepting_socket, F_GETFL);
     if (flags_bu == -1) {
         log.err(TAG, "Failed to get listening socket flags");
+        exit(EXIT_FAILURE);
     } else {
         log.deb(TAG, "Got listening socket flags");
     }
     if (fcntl(client_accepting_socket, F_SETFL, flags_bu | O_NONBLOCK) == -1) {
         log.err(TAG, "Failed to set listening socket non-block");
+        exit(EXIT_FAILURE);
     } else {
         log.deb(TAG, "Listening socket set non-block");
     }
@@ -63,9 +68,8 @@ void Proxy::try_accept_client() {
 
     int new_client = accept(client_accepting_socket, addr, &addr_len);
     if (new_client == -1) {
-        if (errno != 11) {
-            log.err(TAG, "Failed to accept new client " + std::to_string(errno));
-        }
+        log.err(TAG, "Failed to accept new client " + std::to_string(errno));
+        return false;
     } else {
         log.info(TAG, "Accepted new client on socket " + std::to_string(new_client));
         insert_socket(new_client, addr, addr_len, CLIENT);
@@ -73,64 +77,154 @@ void Proxy::try_accept_client() {
 
     if (fcntl(client_accepting_socket, F_SETFL, flags_bu) == -1) {
         log.err(TAG, "Failed to backup listening socket");
+        exit(EXIT_FAILURE);
     } else {
         log.deb(TAG, "Listening socket backed-up successfully");
     }
+    return true;
 
 
+}
+
+SocketHandler *Proxy::find_by_server_socket(int server_socket) {
+    auto it = socketHandlers.begin();
+    while (it != socketHandlers.end()) {
+        if (it->second->getServerSocket() == server_socket) {
+//            log.deb(TAG, "Found handler for server " + std::to_string(server_socket));
+            return it->second;
+        }
+        it++;
+    }
+    log.err(TAG, "Not found handler for server " + std::to_string(server_socket));
+    return nullptr;
 }
 
 void Proxy::launch() {
     int poll_return = 0;
     while (alive) {
-        poll_return = poll(poll_fds.data(), poll_fds.size(), 0);
+        //TODO mb make a separate function for poll-handling
+        poll_return = poll(poll_fds.data(), poll_fds.size(), -1);
         if (poll_return == -1) {
-            log.err(TAG, "Error in poll");
+//            log.err(TAG, "Error in poll");
             break;
         } else {
+//            log.deb(TAG, "Poll return is " + std::to_string(poll_return));
+//            log.deb(TAG, "Sockets size is " + std::to_string(sockets.size()));
             for (auto &poll_fd: poll_fds) {
+                log.err(TAG, "Searching for " + std::to_string(poll_fd.fd));
                 auto find_result = sockets.find(poll_fd.fd);
                 if (find_result == sockets.end()) {
-                    log.err(TAG, "Socket not found");
+                    log.err(TAG, "Socket " + std::to_string(poll_fd.fd) + " not found");
                     exit(EXIT_FAILURE);
                 }
                 Socket *cur_sock = (*find_result).second;
                 if (cur_sock->type == CLIENT) {
-                    if (!socketHandlers.at(poll_fd.fd)->work(poll_fd.revents)) {
+                    log.deb(TAG, "Checking client pollfd " + std::to_string(poll_fd.fd));
+//                    int prev_serv_sock_val = socketHandlers.at(poll_fd.fd)->getServerSocket();
+                    if (!socketHandlers.at(poll_fd.fd)->work(poll_fd.revents, CLIENT)) {
                         remove_client(poll_fd.fd);
+                        break;
                     }
+//                    if(prev_serv_sock_val != socketHandlers.at(poll_fd.fd)->getServerSocket()) {
+//                        break;
+//                    }
                     poll_fd.revents = 0;
                 } else if (cur_sock->type == ACCEPTING) {
+//                    log.deb(TAG, "Checking accept pollfd " + std::to_string(poll_fd.fd));
                     if (poll_fd.revents & POLLIN) {
-                        try_accept_client();
+                        if(try_accept_client()) {
+                            break;
+                        }
                     }
                 } else if (cur_sock->type == SERVER) {
-                    //TODO implement
+//                    log.deb(TAG, "Checking server pollfd " + std::to_string(poll_fd.fd));
+                    SocketHandler *found_handler = find_by_server_socket(poll_fd.fd);
+                    if (found_handler == nullptr) {
+                        log.info(TAG, "Server " + std::to_string(poll_fd.fd) + " disconnected");
+                        remove_server(poll_fd.fd);
+                        break;
+                    } else {
+//                        log.info(TAG, "Receiving response from server " + std::to_string(poll_fd.fd));
+                        if (!found_handler->work(poll_fd.revents, SERVER)) {
+                            //TODO move it to separate function
+                            remove_server(poll_fd.fd);
+//                            remove_client(found_handler->getClientSocket());
+                            break;
+                        }
+                    }
                 }
             }
         }
+//        for (auto &socket: socketHandlers) {
+//            socket.second->work(0, CLIENT);
+//        }
     }
 }
 
 void Proxy::remove_client(int socket) {
+    log.deb(TAG, "Deleting client");
+
+    if(socketHandlers.at(socket)->getType() == LOAD) {
+        remove_server(socketHandlers.at(socket)->getServerSocket());
+    }
+    log.deb(TAG, "Client's server deleted");
+
+
     auto it = poll_fds.begin();
-    while (it->fd != socket) it++;
+    while (it != poll_fds.end()) {
+        if(it->fd == socket) {
+            break;
+        }
+        it++;
+    }
+
+
     poll_fds.erase(it);
     sockets.erase(socket);
     delete socketHandlers.at(socket);
     socketHandlers.erase(socket);
     close(socket);
     //TODO implement transfer of duty if the socket was SERVER
-    log.info(TAG, "Client " + std::to_string(socket) + " disconnected");
+    log.err(TAG, "Client " + std::to_string(socket) + " disconnected");
+}
+
+void Proxy::remove_server(int server_sock) {
+    log.deb(TAG, "Disconnecting server");
+    auto it = poll_fds.begin();
+    while (it != poll_fds.end()) {
+        if(it->fd == server_sock) {
+            break;
+        }
+        it++;
+    }
+    if(it == poll_fds.end()) {
+        return;
+    }
+
+    poll_fds.erase(it);
+    sockets.erase(server_sock);
+    close(server_sock);
+    log.err(TAG, "Server " + std::to_string(server_sock) + " disconnected");
 }
 
 void Proxy::insert_socket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type) {
+    poll_fds.push_back(initialize_pollfd(new_socket, type));
+    log.deb(TAG, "Pushed " + std::to_string(new_socket) + " to pollfd vector");
     auto sock = new Socket(new_socket, sockAddr, sockLen, type);
     sockets.insert(std::pair<int, Socket *>(new_socket, sock));
     socketHandlers.insert(
-            std::pair<int, SocketHandler *>(new_socket, new SocketHandler(new_socket, *casher, poll_fds)));
+            std::pair<int, SocketHandler *>(new_socket, new SocketHandler(new_socket, *casher, poll_fds, sockets)));
     log.deb(TAG, "New SocketHandler for socket " + std::to_string(new_socket) + " created");
-    poll_fds.push_back(initialize_pollfd(new_socket));
-    log.deb(TAG, "Pushed " + std::to_string(new_socket) + " to pollfd vector");
 }
+
+Proxy::~Proxy() {
+    delete casher;
+    for (auto &a: sockets) {
+        delete a.second;
+    }
+    for (auto &a: socketHandlers) {
+        delete a.second;
+    }
+}
+
 

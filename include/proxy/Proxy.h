@@ -24,18 +24,25 @@ private:
 
     int client_accepting_socket;
 
-    static pollfd initialize_pollfd(int fd);
+    static pollfd initialize_pollfd(int fd, SocketType type);
 
     void insert_socket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type);
 
     void remove_client(int socket);
 
+    void remove_server(int server_sock);
+
+    SocketHandler* find_by_server_socket(int server_socket);
+
 public:
     void start_listening_mode();
 
-    void try_accept_client();
+    bool try_accept_client();
 
     explicit Proxy(int port);
 
+    virtual ~Proxy();
+
     void launch();
+
 };
