@@ -12,8 +12,8 @@
 
 #define TAG "socket_handler"
 
-SocketHandler::SocketHandler(int sockfd, Casher &casher, std::vector<pollfd> &pfds_ref,
-                             std::map<int, Socket *> &sockets_ref) : casher(casher),
+SocketHandler::SocketHandler(int sockfd, Cacher &casher, std::vector<pollfd> &pfds_ref,
+                             std::map<int, Socket *> &sockets_ref) : cacher(casher),
                                                                      client_socket(sockfd),
                                                                      server_socket(-1),
                                                                      log(*new Logger(
@@ -29,7 +29,8 @@ SocketHandler::SocketHandler(int sockfd, Casher &casher, std::vector<pollfd> &pf
                                                                      poll_fds_ref(pfds_ref),
                                                                      sockets_ref(sockets_ref),
                                                                      req_sent_bytes(0),
-                                                                     resp_sent_bytes(0) {
+                                                                     resp_sent_bytes(0),
+                                                                     connected_to_server_this_turn(false) {
     init_response_parser();
     init_request_parser();
 }
@@ -67,7 +68,7 @@ void SocketHandler::init_response_parser() {
 int SocketHandler::url_callback(http_parser *parser, const char *at, size_t length) {
 //    std::cout << "Callback triggered : " << "URL" << std::endl;
     auto sh = static_cast<SocketHandler *>(parser->data);
-    sh->url.append(at, length);
+    sh->req_url.append(at, length);
     return 0;
 }
 
@@ -167,13 +168,15 @@ bool SocketHandler::receive_and_parse_request() {
 
     request_full.append(request_buff, recved);
 
-    log.deb(TAG, "Parsing url");
     parsed_url = new http_parser_url;
     http_parser_url_init(parsed_url);
-    if (http_parser_parse_url(url.data(), url.length(), 0, parsed_url)) {
-        log.err(TAG, "Error parsing url in request from " + std::to_string(client_socket));
+    log.deb(TAG, "Parsing req_url : " + req_url);
+    if (http_parser_parse_url(req_url.data(), req_url.length(), 0, parsed_url)) {
+        log.err(TAG, "Error parsing req_url in request from " + std::to_string(client_socket));
         return false;
     }
+    log.deb(TAG, "Parsed req_url : " + req_url);
+
 //    log.deb(TAG, request_buff);
 
     return true;
@@ -209,20 +212,28 @@ bool SocketHandler::receive_and_parse_response() {
 
 
     response_full.append(response_buff, recved);
-
+    if (type == LOAD_CASHING) {
+        log.deb(TAG, "Appending cache");
+        auto cache_return = cacher.appendCache(req_url, response_buff, recved);
+        log.deb(TAG, "Written new data in cache");
+        if (cache_return == CNESP) {
+            log.err(TAG, "Not enough space in cache");
+            type = LOAD_TRANSIENT;
+        }
+    }
     return true;
 }
 
 bool SocketHandler::acquire_handler_type() {
 //    log.deb(TAG, "Acquiring handler type on socket " + std::to_string(client_socket));
-    if (url.empty()) {
+    if (req_url.empty()) {
         log.err(TAG, "Error acquiring handler type");
         return false;
     }
-    if (casher.is_cashed(url)) {
+    if (cacher.is_cached(req_url)) {
         type = CASH;
     } else {
-        type = LOAD;
+        type = LOAD_CASHING;
     }
 //    log.deb(TAG, "Type acquired");
     return true;
@@ -236,10 +247,10 @@ bool SocketHandler::connect_to_server() {
     hint.ai_family = PF_UNSPEC;
 
     std::string url_host;
-    url_host.append(url, parsed_url->field_data[1].off, parsed_url->field_data[1].len);
+    url_host.append(req_url, parsed_url->field_data[1].off, parsed_url->field_data[1].len);
 
 
-    log.deb(TAG, "Trying getting addr of server on url " + url_host);
+    log.deb(TAG, "Trying getting addr of server on req_url " + url_host);
     if (getaddrinfo(url_host.c_str(), "80", &hint, &ailist)) {
         log.err(TAG, "Error getting server address data " + std::to_string(errno));
         return false;
@@ -254,20 +265,22 @@ bool SocketHandler::connect_to_server() {
             return false;
         }
         if (connect(sock, aip->ai_addr, aip->ai_addrlen) == 0) {
-            log.info(TAG, "Successfully connected to url " + url + " on client " + std::to_string(client_socket));
+            log.info(TAG,
+                     "Successfully connected to req_url " + req_url + " on client " + std::to_string(client_socket));
             server_socket = sock;
             pollfd new_pollfd{};
             new_pollfd.fd = sock;
             new_pollfd.events = POLLIN | POLLOUT;
             poll_fds_ref.push_back(new_pollfd);
-            log.deb(TAG, "Pushed " + std::to_string(new_pollfd.fd) + " to pollfd vector");
+            log.deb(TAG, "Pushed new server " + std::to_string(new_pollfd.fd) + " to pollfd vector");
             auto socket_wrap = new Socket(sock, aip->ai_addr, aip->ai_addrlen, SERVER);
             sockets_ref.insert(std::pair<int, Socket *>(sock, socket_wrap));
+            connected_to_server_this_turn = true;
             return true;
         }
         close(sock);
     }
-    log.err(TAG, "Couldn't connect to server by url " + url + " on socket " + std::to_string(client_socket));
+    log.err(TAG, "Couldn't connect to server by req_url " + req_url + " on socket " + std::to_string(client_socket));
     return false;
 }
 
@@ -309,19 +322,19 @@ bool SocketHandler::send_response() {
     return true;
 }
 
-bool SocketHandler::receive_response() {
-    log.info(TAG, "Receiving response from " + std::to_string(server_socket));
-    if (type == LOAD) {
-        return send_response();
-    } else if (type == CASH) {
-        //TODO
-    }
-}
+//bool SocketHandler::receive_response() {
+//    log.info(TAG, "Receiving response from " + std::to_string(server_socket));
+//    if (type == LOAD_CASHING) {
+//        return send_response();
+//    } else if (type == CASH) {
+//        //TODO
+//    }
+//}
 
 bool SocketHandler::work(short revents, SocketType sock_type) {
 //    log.info(TAG, "Resp sent is " + std::to_string(resp_sent));
-
-    if(resp_sent && req_sent) {
+    connected_to_server_this_turn = false;
+    if (resp_sent && req_sent) {
         return false;
     }
 
@@ -349,22 +362,22 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
                 return false;
             }
         }
-        if (type == LOAD) {
+        if (type == LOAD_CASHING) {
             if (!send_request()) {
                 return false;
             }
         }
     }
 
-    if (type == LOAD && resp_ready && !resp_sent) {
-        if (revents | POLLOUT) {
-            if (!send_response()) {
-                return false;
-            }
-        }
-    } else if (type == CASH) {
-        //TODO
-    }
+//    if (type == LOAD_CASHING && resp_ready && !resp_sent) {//TODO transient mode, not wait until all received
+//        if (revents | POLLOUT) {
+//            if (!send_response()) {
+//                return false;
+//            }
+//        }
+//    } else if (type == CASH) {
+//        //TODO
+//    }
 
 
     return true;
@@ -390,6 +403,10 @@ int SocketHandler::getClientSocket() const {
 
 HandlerType SocketHandler::getType() const {
     return type;
+}
+
+bool SocketHandler::isConnectedToServerThisTurn() const {
+    return connected_to_server_this_turn;
 }
 
 

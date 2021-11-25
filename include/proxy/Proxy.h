@@ -16,7 +16,7 @@
 class Proxy {
 private:
     Logger log;
-    Casher *casher;
+    Cacher *cacher;
     std::vector<pollfd> poll_fds;
     std::map<int, SocketHandler *> socketHandlers;
     std::map<int, Socket *> sockets;

@@ -1,30 +1,45 @@
 #pragma once
-#ifndef CASHER_H
-#define CASHER_H
+#ifndef CACHER_H
+#define CACHER_H
 
 #include <map>
 #include <string>
+#include <logger.hpp>
 
-    class CashedPage
-    {
-    private:
-        bool finished;
+enum CacheReturn {
+    COK, // OK
+    CNESP, // not enough space
+    CPNF, // page not found
+    COTH // other error
+};
 
-    public:
-        bool is_fully_loaded(std::string url);
-        bool is_finished();
+class CachedPage {
+private:
+    Logger log;
+    bool finished;
+    std::string page;
+public:
+    bool is_finished();
 
-        CashedPage();
-        ~CashedPage();
-    };
+    CacheReturn append_page(char *buffer, size_t len);
 
-    class Casher
-    {
-    private:
-        std::map<std::string, CashedPage*> pages; //url-page_in_cash
+    CachedPage();
+};
 
-    public:
-        bool is_cashed(std::string url);
-        Casher();
-    };
-#endif // CASHER_H
+class Cacher {
+private:
+    Logger log;
+    std::map<std::string, CachedPage *> pages; //req_url-page_in_cash
+//        std::map<int, std::string> subscribers;
+
+public:
+    CacheReturn appendCache(const std::string& url, char *buffer, size_t len);
+
+    bool is_fully_loaded(const std::string &url);
+
+    bool is_cached(const std::string &url);
+
+    Cacher();
+};
+
+#endif // CACHER_H

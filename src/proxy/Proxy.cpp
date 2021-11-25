@@ -36,7 +36,7 @@ Proxy::Proxy(int port) : log(*new Logger(Constants::DEBUG, std::cout)), alive(tr
     }
 //    poll_fds.push_back(initialize_pollfd(client_accepting_socket));
     insert_socket(client_accepting_socket, (sockaddr *) &addr, sizeof(addr), ACCEPTING);
-    casher = new Casher();
+    cacher = new Cacher();
     log.deb(TAG, "Casher initialized");
 }
 
@@ -111,7 +111,7 @@ void Proxy::launch() {
 //            log.deb(TAG, "Poll return is " + std::to_string(poll_return));
 //            log.deb(TAG, "Sockets size is " + std::to_string(sockets.size()));
             for (auto &poll_fd: poll_fds) {
-                log.err(TAG, "Searching for " + std::to_string(poll_fd.fd));
+//                log.err(TAG, "Searching for " + std::to_string(poll_fd.fd));
                 auto find_result = sockets.find(poll_fd.fd);
                 if (find_result == sockets.end()) {
                     log.err(TAG, "Socket " + std::to_string(poll_fd.fd) + " not found");
@@ -119,10 +119,15 @@ void Proxy::launch() {
                 }
                 Socket *cur_sock = (*find_result).second;
                 if (cur_sock->type == CLIENT) {
-                    log.deb(TAG, "Checking client pollfd " + std::to_string(poll_fd.fd));
+//                    log.deb(TAG, "Checking client pollfd " + std::to_string(poll_fd.fd));
 //                    int prev_serv_sock_val = socketHandlers.at(poll_fd.fd)->getServerSocket();
-                    if (!socketHandlers.at(poll_fd.fd)->work(poll_fd.revents, CLIENT)) {
+                    auto foundHandler = socketHandlers.at(poll_fd.fd);
+                    if (!foundHandler->work(poll_fd.revents, CLIENT)) {
                         remove_client(poll_fd.fd);
+                        break;
+                    }
+                    if(foundHandler->isConnectedToServerThisTurn()) {
+                        log.deb(TAG, "PENIS PENIS");
                         break;
                     }
 //                    if(prev_serv_sock_val != socketHandlers.at(poll_fd.fd)->getServerSocket()) {
@@ -140,7 +145,7 @@ void Proxy::launch() {
 //                    log.deb(TAG, "Checking server pollfd " + std::to_string(poll_fd.fd));
                     SocketHandler *found_handler = find_by_server_socket(poll_fd.fd);
                     if (found_handler == nullptr) {
-                        log.info(TAG, "Server " + std::to_string(poll_fd.fd) + " disconnected");
+//                        log.info(TAG, "Server " + std::to_string(poll_fd.fd) + " disconnected");
                         remove_server(poll_fd.fd);
                         break;
                     } else {
@@ -162,12 +167,12 @@ void Proxy::launch() {
 }
 
 void Proxy::remove_client(int socket) {
-    log.deb(TAG, "Deleting client");
+//    log.deb(TAG, "Deleting client");
 
-    if(socketHandlers.at(socket)->getType() == LOAD) {
+    if(socketHandlers.at(socket)->getType() == LOAD_CASHING) {
         remove_server(socketHandlers.at(socket)->getServerSocket());
     }
-    log.deb(TAG, "Client's server deleted");
+//    log.deb(TAG, "Client's server deleted");
 
 
     auto it = poll_fds.begin();
@@ -189,7 +194,7 @@ void Proxy::remove_client(int socket) {
 }
 
 void Proxy::remove_server(int server_sock) {
-    log.deb(TAG, "Disconnecting server");
+//    log.deb(TAG, "Disconnecting server");
     auto it = poll_fds.begin();
     while (it != poll_fds.end()) {
         if(it->fd == server_sock) {
@@ -209,16 +214,16 @@ void Proxy::remove_server(int server_sock) {
 
 void Proxy::insert_socket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type) {
     poll_fds.push_back(initialize_pollfd(new_socket, type));
-    log.deb(TAG, "Pushed " + std::to_string(new_socket) + " to pollfd vector");
+//    log.deb(TAG, "Pushed " + std::to_string(new_socket) + " to pollfd vector");
     auto sock = new Socket(new_socket, sockAddr, sockLen, type);
     sockets.insert(std::pair<int, Socket *>(new_socket, sock));
     socketHandlers.insert(
-            std::pair<int, SocketHandler *>(new_socket, new SocketHandler(new_socket, *casher, poll_fds, sockets)));
+            std::pair<int, SocketHandler *>(new_socket, new SocketHandler(new_socket, *cacher, poll_fds, sockets)));
     log.deb(TAG, "New SocketHandler for socket " + std::to_string(new_socket) + " created");
 }
 
 Proxy::~Proxy() {
-    delete casher;
+    delete cacher;
     for (auto &a: sockets) {
         delete a.second;
     }

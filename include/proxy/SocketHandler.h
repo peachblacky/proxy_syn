@@ -7,7 +7,10 @@
 #include <net/Socket.h>
 
 enum HandlerType {
-    CASH, LOAD, STANDBY
+    CASH,
+    LOAD_CASHING,
+    LOAD_TRANSIENT,
+    STANDBY
 };
 
 enum ParserMode {
@@ -45,7 +48,7 @@ private:
     std::string cur_header_value;
 
     //Parsed request of client
-    std::string url;
+    std::string req_url;
     std::map<std::string, std::string> req_headers;
     std::string req_body;
 
@@ -55,7 +58,7 @@ private:
     std::string resp_body;
 
     //Casher and logger
-    Casher &casher;
+    Cacher &cacher;
     Logger log;
 
     //Parser states
@@ -70,6 +73,8 @@ private:
     bool resp_ready;
     bool resp_sent;
 
+    //Other states
+    bool connected_to_server_this_turn;
 
     //Parser
     http_parser *resp_parser;
@@ -105,6 +110,8 @@ private:
 
     bool send_response();
 
+    bool retrieve_data_from_cache();
+
     bool transfer_response_from_cash();
 
     bool receive_response();
@@ -120,8 +127,9 @@ public:
 
     int getClientSocket() const;
 
-    SocketHandler(int sockfd, Casher &casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
+    SocketHandler(int sockfd, Cacher &casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
 
     virtual ~SocketHandler();
 
+    bool isConnectedToServerThisTurn() const;
 };
