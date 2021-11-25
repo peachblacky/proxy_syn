@@ -1727,7 +1727,7 @@ reexecute:
           REEXECUTE();
         }
 
-        /* finished the header */
+        /* fully_loaded the header */
         switch (parser->header_state) {
           case h_connection_keep_alive:
             parser->flags |= F_CONNECTION_KEEP_ALIVE;

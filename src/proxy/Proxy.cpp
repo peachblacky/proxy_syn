@@ -127,7 +127,6 @@ void Proxy::launch() {
                         break;
                     }
                     if(foundHandler->isConnectedToServerThisTurn()) {
-                        log.deb(TAG, "PENIS PENIS");
                         break;
                     }
 //                    if(prev_serv_sock_val != socketHandlers.at(poll_fd.fd)->getServerSocket()) {

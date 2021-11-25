@@ -39,9 +39,9 @@ private:
     //Response itself
     static const ssize_t resp_buff_capacity = BUFSIZ;
 //    char *response_buff;
-    std::string response_full;
+//    std::string response_full;
 //    ssize_t resp_buf_len;
-    ssize_t resp_sent_bytes;
+    size_t resp_cache_position;
 
     //buffer for parsing req_headers
     std::string cur_header_field;
@@ -108,9 +108,9 @@ private:
 
     bool connect_to_server();
 
-    bool send_response();
+    bool send_response_chunk(char *buffer, ssize_t len);
 
-    bool retrieve_data_from_cache();
+    bool send_chunk_from_cache();
 
     bool transfer_response_from_cash();
 
@@ -132,4 +132,6 @@ public:
     virtual ~SocketHandler();
 
     bool isConnectedToServerThisTurn() const;
+
+    Cacher &getCacher() const;
 };

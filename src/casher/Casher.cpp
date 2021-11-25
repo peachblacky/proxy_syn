@@ -15,6 +15,7 @@ bool Cacher::is_cached(const std::string &url) {
     } else {
         return true;
     }
+
 }
 
 bool Cacher::is_fully_loaded(const std::string &url) {
@@ -22,7 +23,7 @@ bool Cacher::is_fully_loaded(const std::string &url) {
     if (found_page == pages.end()) {
         return false;
     }
-    return found_page->second->is_finished();
+    return found_page->second->is_fully_loaded();
 }
 
 CacheReturn Cacher::appendCache(const std::string &url, char *buffer, size_t len) {
@@ -34,10 +35,27 @@ CacheReturn Cacher::appendCache(const std::string &url, char *buffer, size_t len
     }
     auto foundPage = pages.find(url);
     if (foundPage == pages.end()) {
-        return CPNF;
+        return CacheReturn::PageNotFound;
     }
     log.deb(TAGC, "Appending cache");
     return foundPage->second->append_page(buffer, len);
+}
+
+CacheReturn Cacher::set_fully_loaded(const std::string &url) {
+    auto find_result = pages.find(url);
+    if (find_result == pages.end()) {
+        CacheReturn::PageNotFound;
+    }
+    return find_result->second->set_fully_loaded();
+}
+
+Cacher::Cacher() :
+        log(*new Logger(
+                Constants::DEBUG,
+                std::cout)) {}
+
+size_t Cacher::get_chunk_size() {
+    return CACHE_CHUNK_SIZE;
 }
 
 CacheReturn CachedPage::append_page(char *buffer, size_t len) {
@@ -46,21 +64,57 @@ CacheReturn CachedPage::append_page(char *buffer, size_t len) {
         page.append(buffer, len);
         log.deb(TAGP, "Page appended");
     } catch (std::bad_alloc &bad_alloc) {
-        return CNESP;
+        return CacheReturn::NotEnoughSpace;
     }
-    return COK;
+    return CacheReturn::OK;
 }
 
-CachedPage::CachedPage() : finished(false),
+CachedPage::CachedPage() : fully_loaded(false),
                            log(*new Logger(
                                    Constants::DEBUG,
                                    std::cout)) {}
 
-Cacher::Cacher() :
-        log(*new Logger(
-                Constants::DEBUG,
-                std::cout)) {};
 
-bool CachedPage::is_finished() {
-    return finished;
+CacheReturn CachedPage::acquire_data_chunk(char *buffer, ssize_t &len, size_t position) {
+    if (position > page.size()) {
+        return CacheReturn::InvalidPosition;
+    }
+    len = (page.size() - position) > CACHE_CHUNK_SIZE ? CACHE_CHUNK_SIZE : (page.size() - position);
+    size_t ret = 0;
+    try {
+        ret = page.copy(buffer, len, position);
+    } catch (std::out_of_range &e) {
+        return CacheReturn::InvalidPosition;
+    }
+    if (ret != len) {
+        return CacheReturn::OtherError;
+    }
+    return CacheReturn::OK;
 }
+
+CacheReturn Cacher::acquire_chunk(char *buf, ssize_t &len, const std::string &url, size_t position) {
+    auto find_result = pages.find(url);
+    if (find_result == pages.end()) {
+        CacheReturn::PageNotFound;
+    }
+    auto found_page = find_result->second;
+    if (position > found_page->page_size()) {
+        return CacheReturn::InvalidPosition;
+    }
+    return found_page->acquire_data_chunk(buf, len, position);
+}
+
+
+bool CachedPage::is_fully_loaded() const {
+    return fully_loaded;
+}
+
+size_t CachedPage::page_size() {
+    return page.size();
+}
+
+CacheReturn CachedPage::set_fully_loaded() {
+    fully_loaded = true;
+    return CacheReturn::OK;
+}
+
