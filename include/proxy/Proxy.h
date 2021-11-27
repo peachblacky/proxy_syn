@@ -15,7 +15,7 @@
 
 class Proxy {
 private:
-    Logger log;
+    Logger *log;
     Cacher *cacher;
     std::vector<pollfd> poll_fds;
     std::map<int, SocketHandler *> socketHandlers;
@@ -33,6 +33,8 @@ private:
     void remove_server(int server_sock);
 
     SocketHandler* find_by_server_socket(int server_socket);
+
+    bool try_choose_deputy();
 
 public:
     void start_listening_mode();

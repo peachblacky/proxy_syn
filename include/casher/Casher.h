@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <logger.hpp>
+#include <vector>
 
 enum class CacheReturn {
     PageNotFound,
@@ -18,9 +19,9 @@ enum class CacheReturn {
 
 class CachedPage {
 private:
-    Logger log;
+    Logger *log;
     bool fully_loaded;
-    std::string page;
+    std::vector<char> page;
 
     bool is_fully_loaded() const;
 
@@ -28,7 +29,7 @@ private:
 
     CacheReturn append_page(char *buffer, size_t len);
 
-    CacheReturn acquire_data_chunk(char *buffer, ssize_t& len, size_t position);
+    CacheReturn acquire_data_chunk(char *buffer, size_t& len, size_t position);
 
     CacheReturn set_fully_loaded();
 
@@ -39,16 +40,17 @@ private:
 
 class Cacher {
 private:
-    Logger log;
+    Logger *log;
     std::map<std::string, CachedPage *> pages; //req_url-page_in_cash
-//        std::map<int, std::string> subscribers;
 
 public:
     CacheReturn appendCache(const std::string& url, char *buffer, size_t len);
 
     CacheReturn set_fully_loaded(const std::string& url);
 
-    CacheReturn acquire_chunk(char* buf, ssize_t& len, const std::string& url, size_t position);
+    CacheReturn acquire_chunk(char* buf, size_t& len, const std::string& url, size_t position);
+
+    void delete_page(const std::string& url);
 
     bool is_fully_loaded(const std::string &url);
 

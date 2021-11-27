@@ -5,6 +5,7 @@
 #include "http_parser/http_parser.h"
 #include <vector>
 #include <net/Socket.h>
+#include <strings.h>
 
 enum HandlerType {
     CASH,
@@ -31,16 +32,11 @@ private:
 
     //Request itself
     static const ssize_t req_buff_capacity = BUFSIZ;
-//    char *request_buff;
     std::string request_full;
-//    ssize_t req_buff_len;
     ssize_t req_sent_bytes;
 
     //Response itself
     static const ssize_t resp_buff_capacity = BUFSIZ;
-//    char *response_buff;
-//    std::string response_full;
-//    ssize_t resp_buf_len;
     size_t resp_cache_position;
 
     //buffer for parsing req_headers
@@ -58,8 +54,8 @@ private:
     std::string resp_body;
 
     //Casher and logger
-    Cacher &cacher;
-    Logger log;
+    Cacher *cacher;
+    Logger *log;
 
     //Parser states
     bool last_was_value;
@@ -77,11 +73,11 @@ private:
     bool connected_to_server_this_turn;
 
     //Parser
-    http_parser *resp_parser;
-    http_parser_settings *resp_settings;
-    http_parser *req_parser;
-    http_parser_settings *req_settings;
-    http_parser_url *parsed_url;
+    http_parser *resp_parser{};
+    http_parser_settings *resp_settings{};
+    http_parser *req_parser{};
+    http_parser_settings *req_settings{};
+    http_parser_url *parsed_url{};
     ParserMode parser_mode;
 
     static int url_callback(http_parser *parser, const char *at, size_t length);
@@ -91,8 +87,6 @@ private:
     static int header_value_callback(http_parser *parser, const char *at, size_t length);
 
     static int message_complete_callback(http_parser *parser);
-
-    static int body_callback(http_parser *parser, const char *at, size_t length);
 
     void init_request_parser();
 
@@ -108,30 +102,22 @@ private:
 
     bool connect_to_server();
 
-    bool send_response_chunk(char *buffer, ssize_t len);
+    bool send_response_chunk(char *buffer, size_t len);
 
     bool send_chunk_from_cache();
 
-    bool transfer_response_from_cash();
-
-    bool receive_response();
-
 public:
     bool work(short revents, SocketType sock_type);
-
-    bool work_server(short revents);
 
     int getServerSocket() const;
 
     HandlerType getType() const;
 
-    int getClientSocket() const;
-
-    SocketHandler(int sockfd, Cacher &casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
+    SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
 
     virtual ~SocketHandler();
 
     bool isConnectedToServerThisTurn() const;
 
-    Cacher &getCacher() const;
+    Cacher *getCacher() const;
 };
