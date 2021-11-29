@@ -24,22 +24,22 @@ private:
 
     int client_accepting_socket;
 
-    static pollfd initialize_pollfd(int fd, SocketType type);
+    static pollfd initializePollfd(int fd, SocketType type);
 
-    void insert_socket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type);
+    void insertSocket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type);
 
-    void remove_client(int socket);
+    void removeClient(int socket);
 
-    void remove_server(int server_sock);
+    void removeServer(int server_sock);
 
-    SocketHandler* find_by_server_socket(int server_socket);
+    SocketHandler *findByServerSocket(int server_socket);
 
-    bool try_choose_deputy();
+    bool tryChooseDeputy(int socket);
 
 public:
-    void start_listening_mode();
+    void startListeningMode();
 
-    bool try_accept_client();
+    bool tryAcceptClient();
 
     explicit Proxy(int port);
 

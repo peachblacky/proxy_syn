@@ -12,7 +12,7 @@ enum class CacheReturn {
     NotEnoughSpace,
     OtherError,
     InvalidPosition,
-    OK // OK
+    OK
 };
 
 #define CACHE_CHUNK_SIZE 8192
@@ -23,15 +23,15 @@ private:
     bool fully_loaded;
     std::vector<char> page;
 
-    bool is_fully_loaded() const;
+    bool isFullyLoaded() const;
 
-    size_t page_size();
+    size_t pageSize();
 
-    CacheReturn append_page(char *buffer, size_t len);
+    CacheReturn appendPage(char *buffer, size_t len);
 
-    CacheReturn acquire_data_chunk(char *buffer, size_t& len, size_t position);
+    CacheReturn acquireDataChunk(char *buffer, size_t &len, size_t position);
 
-    CacheReturn set_fully_loaded();
+    CacheReturn setFullyLoaded();
 
     CachedPage();
 
@@ -44,21 +44,21 @@ private:
     std::map<std::string, CachedPage *> pages; //req_url-page_in_cash
 
 public:
-    CacheReturn appendCache(const std::string& url, char *buffer, size_t len);
-
-    CacheReturn set_fully_loaded(const std::string& url);
-
-    CacheReturn acquire_chunk(char* buf, size_t& len, const std::string& url, size_t position);
-
-    void delete_page(const std::string& url);
-
-    bool is_fully_loaded(const std::string &url);
-
-    bool is_cached(const std::string &url);
-
     Cacher();
 
-    static size_t get_chunk_size();
+    CacheReturn appendCache(const std::string &url, char *buffer, size_t len);
+
+    CacheReturn setFullyLoaded(const std::string &url);
+
+    CacheReturn acquireChunk(char *buf, size_t &len, const std::string &url, size_t position);
+
+    void deletePage(const std::string &url);
+
+    bool isFullyLoaded(const std::string &url);
+
+    bool isCached(const std::string &url);
+
+    static size_t getChunkSize();
 };
 
 #endif // CACHER_H

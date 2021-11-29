@@ -6,21 +6,19 @@
 #include <vector>
 #include <net/Socket.h>
 #include <strings.h>
+#include <signal.h>
 
 enum HandlerType {
     CASH,
     LOAD_CASHING,
     LOAD_TRANSIENT,
-    STANDBY
+    STANDBY,
+    HEIR // temporal role for heir of ServerHandler until he reaches the front end of cache
 };
 
 enum ParserMode {
     REQUEST, RESPONSE
 };
-
-//typedef struct {
-//
-//} request_data;
 
 class SocketHandler {
 private:
@@ -29,6 +27,7 @@ private:
     int server_socket;
     std::vector<pollfd> &poll_fds_ref;
     std::map<int, Socket *> &sockets_ref;
+    SocketHandler* ancestor = nullptr;
 
     //Request itself
     static const ssize_t req_buff_capacity = BUFSIZ;
@@ -51,7 +50,6 @@ private:
 
     //Parsed response of server
     std::map<std::string, std::string> resp_headers;
-    std::string resp_body;
 
     //Casher and logger
     Cacher *cacher;
@@ -61,16 +59,16 @@ private:
     bool last_was_value;
 
     //Request states
-    bool req_in_process;
-    bool req_ready;
-    bool req_sent;
+    bool req_ready = false;
+    bool req_sent = false;
 
     //Response states
-    bool resp_ready;
-    bool resp_sent;
+    bool resp_ready = false;
+    bool resp_sent = false;
 
     //Other states
     bool connected_to_server_this_turn;
+    bool has_heir;
 
     //Parser
     http_parser *resp_parser{};
@@ -80,44 +78,54 @@ private:
     http_parser_url *parsed_url{};
     ParserMode parser_mode;
 
-    static int url_callback(http_parser *parser, const char *at, size_t length);
+    static int urlCallback(http_parser *parser, const char *at, size_t length);
 
-    static int header_field_callback(http_parser *parser, const char *at, size_t length);
+    static int headerFieldCallback(http_parser *parser, const char *at, size_t length);
 
-    static int header_value_callback(http_parser *parser, const char *at, size_t length);
+    static int headerValueCallback(http_parser *parser, const char *at, size_t length);
 
-    static int message_complete_callback(http_parser *parser);
+    static int messageCompleteCallback(http_parser *parser);
 
-    void init_request_parser();
+    void initRequestParser();
 
-    void init_response_parser();
+    void initResponseParser();
 
-    bool receive_and_parse_request();
+    bool receiveAndParseRequest();
 
-    bool receive_and_parse_response();
+    bool receiveAndParseResponse();
 
-    bool acquire_handler_type();
+    bool acquireHandlerType();
 
-    bool send_request();
+    bool sendRequest();
 
-    bool connect_to_server();
+    bool connectToServer();
 
-    bool send_response_chunk(char *buffer, size_t len);
+    bool sendResponseChunk(char *buffer, size_t len);
 
-    bool send_chunk_from_cache();
+    bool sendChunkFromCache();
+
+    void becomeMaster();
 
 public:
+    SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
+
     bool work(short revents, SocketType sock_type);
 
     int getServerSocket() const;
 
     HandlerType getType() const;
 
-    SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
+    size_t getRespCachePosition() const;
+
+    const std::string &getReqUrl() const;
+
+    void becomeHeir(SocketHandler* newAncestor);
 
     virtual ~SocketHandler();
 
     bool isConnectedToServerThisTurn() const;
+
+    void setHasHeir(bool hasHeir);
 
     Cacher *getCacher() const;
 };

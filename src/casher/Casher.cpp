@@ -9,7 +9,7 @@
 #define TAGP "CACHE PAGE"
 #define TAGC "CACHE"
 
-bool Cacher::is_cached(const std::string &url) {
+bool Cacher::isCached(const std::string &url) {
     if (pages.find(url) == pages.end()) {
         return false;
     } else {
@@ -18,13 +18,13 @@ bool Cacher::is_cached(const std::string &url) {
 
 }
 
-bool Cacher::is_fully_loaded(const std::string &url) {
+bool Cacher::isFullyLoaded(const std::string &url) {
     auto found_page = pages.find(url);
     if (found_page == pages.end()) {
         return false;
     }
-    log->deb(TAGC, "Page for " + url + " is " + (found_page->second->is_fully_loaded()?"true":"false"));
-    return found_page->second->is_fully_loaded();
+    log->deb(TAGC, "Page for " + url + " is " + (found_page->second->isFullyLoaded() ? "true" : "false"));
+    return found_page->second->isFullyLoaded();
 }
 
 CacheReturn Cacher::appendCache(const std::string &url, char *buffer, size_t len) {
@@ -39,16 +39,16 @@ CacheReturn Cacher::appendCache(const std::string &url, char *buffer, size_t len
         return CacheReturn::PageNotFound;
     }
     log->deb(TAGC, "Appending cache");
-    return foundPage->second->append_page(buffer, len);
+    return foundPage->second->appendPage(buffer, len);
 }
 
-CacheReturn Cacher::set_fully_loaded(const std::string &url) {
+CacheReturn Cacher::setFullyLoaded(const std::string &url) {
     auto find_result = pages.find(url);
     if (find_result == pages.end()) {
         return CacheReturn::PageNotFound;
     }
     log->info(TAGC, "Cache for url " + url + " is sat fully loaded");
-    return find_result->second->set_fully_loaded();
+    return find_result->second->setFullyLoaded();
 }
 
 Cacher::Cacher() :
@@ -56,17 +56,17 @@ Cacher::Cacher() :
                 Constants::DEBUG,
                 std::cerr)) {}
 
-size_t Cacher::get_chunk_size() {
+size_t Cacher::getChunkSize() {
     return CACHE_CHUNK_SIZE;
 }
 
-CacheReturn CachedPage::append_page(char *buffer, size_t len) {
+CacheReturn CachedPage::appendPage(char *buffer, size_t len) {
     try {
         log->deb(TAGP, "Appending page");
 //        page.append(buffer, len);
         std::vector<char> insert_buf(buffer, buffer + len);
 //        page.insert(page.end(), );
-        for(size_t i = 0; i < len; i++) {
+        for (size_t i = 0; i < len; i++) {
             page.push_back(buffer[i]);
         }
         log->deb(TAGP, "Page appended");
@@ -82,30 +82,30 @@ CachedPage::CachedPage() : fully_loaded(false),
                                    std::cerr)) {}
 
 
-CacheReturn CachedPage::acquire_data_chunk(char *buffer, size_t &len, size_t position) {
+CacheReturn CachedPage::acquireDataChunk(char *buffer, size_t &len, size_t position) {
     if (position > page.size()) {
         return CacheReturn::InvalidPosition;
     }
     len = (page.size() - position) > CACHE_CHUNK_SIZE ? CACHE_CHUNK_SIZE : (page.size() - position);
-    for(size_t i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++) {
         buffer[i] = page[position + i];
     }
     return CacheReturn::OK;
 }
 
-CacheReturn Cacher::acquire_chunk(char *buf, size_t &len, const std::string &url, size_t position) {
+CacheReturn Cacher::acquireChunk(char *buf, size_t &len, const std::string &url, size_t position) {
     auto find_result = pages.find(url);
     if (find_result == pages.end()) {
         return CacheReturn::PageNotFound;
     }
     auto found_page = find_result->second;
-    if (position > found_page->page_size()) {
+    if (position > found_page->pageSize()) {
         return CacheReturn::InvalidPosition;
     }
-    return found_page->acquire_data_chunk(buf, len, position);
+    return found_page->acquireDataChunk(buf, len, position);
 }
 
-void Cacher::delete_page(const std::string &url) {
+void Cacher::deletePage(const std::string &url) {
 //    auto find_result = pages.find(url);
 //    if (find_result == pages.end()) {
 //        return;
@@ -114,15 +114,15 @@ void Cacher::delete_page(const std::string &url) {
     pages.erase(url);
 }
 
-bool CachedPage::is_fully_loaded() const {
+bool CachedPage::isFullyLoaded() const {
     return fully_loaded;
 }
 
-size_t CachedPage::page_size() {
+size_t CachedPage::pageSize() {
     return page.size();
 }
 
-CacheReturn CachedPage::set_fully_loaded() {
+CacheReturn CachedPage::setFullyLoaded() {
     fully_loaded = true;
     return CacheReturn::OK;
 }
