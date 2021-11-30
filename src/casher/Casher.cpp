@@ -60,38 +60,6 @@ size_t Cacher::getChunkSize() {
     return CACHE_CHUNK_SIZE;
 }
 
-CacheReturn CachedPage::appendPage(char *buffer, size_t len) {
-    try {
-        log->deb(TAGP, "Appending page");
-//        page.append(buffer, len);
-        std::vector<char> insert_buf(buffer, buffer + len);
-//        page.insert(page.end(), );
-        for (size_t i = 0; i < len; i++) {
-            page.push_back(buffer[i]);
-        }
-        log->deb(TAGP, "Page appended");
-    } catch (std::bad_alloc &bad_alloc) {
-        return CacheReturn::NotEnoughSpace;
-    }
-    return CacheReturn::OK;
-}
-
-CachedPage::CachedPage() : fully_loaded(false),
-                           log(new Logger(
-                                   Constants::DEBUG,
-                                   std::cerr)) {}
-
-
-CacheReturn CachedPage::acquireDataChunk(char *buffer, size_t &len, size_t position) {
-    if (position > page.size()) {
-        return CacheReturn::InvalidPosition;
-    }
-    len = (page.size() - position) > CACHE_CHUNK_SIZE ? CACHE_CHUNK_SIZE : (page.size() - position);
-    for (size_t i = 0; i < len; i++) {
-        buffer[i] = page[position + i];
-    }
-    return CacheReturn::OK;
-}
 
 CacheReturn Cacher::acquireChunk(char *buf, size_t &len, const std::string &url, size_t position) {
     auto find_result = pages.find(url);
@@ -106,13 +74,22 @@ CacheReturn Cacher::acquireChunk(char *buf, size_t &len, const std::string &url,
 }
 
 void Cacher::deletePage(const std::string &url) {
-//    auto find_result = pages.find(url);
-//    if (find_result == pages.end()) {
-//        return;
-//    }
     delete pages.at(url);
     pages.erase(url);
 }
+
+Cacher::~Cacher() {
+    delete log;
+    for(auto &page: pages) {
+        delete page.second;
+    }
+    pages.clear();
+}
+
+CachedPage::CachedPage() : fully_loaded(false),
+                           log(new Logger(
+                                   Constants::DEBUG,
+                                   std::cerr)) {}
 
 bool CachedPage::isFullyLoaded() const {
     return fully_loaded;
@@ -127,3 +104,33 @@ CacheReturn CachedPage::setFullyLoaded() {
     return CacheReturn::OK;
 }
 
+CacheReturn CachedPage::appendPage(char *buffer, size_t len) {
+    try {
+        log->deb(TAGP, "Appending page");
+        std::vector<char> insert_buf(buffer, buffer + len);
+        for (size_t i = 0; i < len; i++) {
+            page.push_back(buffer[i]);
+        }
+        log->deb(TAGP, "Page appended");
+    } catch (std::bad_alloc &bad_alloc) {
+        return CacheReturn::NotEnoughSpace;
+    }
+    return CacheReturn::OK;
+}
+
+
+
+CacheReturn CachedPage::acquireDataChunk(char *buffer, size_t &len, size_t position) {
+    if (position > page.size()) {
+        return CacheReturn::InvalidPosition;
+    }
+    len = (page.size() - position) > CACHE_CHUNK_SIZE ? CACHE_CHUNK_SIZE : (page.size() - position);
+    for (size_t i = 0; i < len; i++) {
+        buffer[i] = page[position + i];
+    }
+    return CacheReturn::OK;
+}
+
+CachedPage::~CachedPage() {
+    delete log;
+}

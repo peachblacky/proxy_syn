@@ -36,6 +36,8 @@ private:
 
     bool tryChooseDeputy(int socket);
 
+    void* SIGINTHandler(int sig);
+
 public:
     void startListeningMode();
 

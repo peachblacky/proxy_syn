@@ -35,6 +35,11 @@ private:
 
     CachedPage();
 
+public:
+    virtual ~CachedPage();
+
+private:
+
     friend class Cacher;
 };
 
@@ -59,6 +64,8 @@ public:
     bool isCached(const std::string &url);
 
     static size_t getChunkSize();
+
+    virtual ~Cacher();
 };
 
 #endif // CACHER_H

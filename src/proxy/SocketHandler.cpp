@@ -101,13 +101,10 @@ int SocketHandler::headerValueCallback(http_parser *parser, const char *at, size
 }
 
 int SocketHandler::messageCompleteCallback(http_parser *parser) {
-    std::cout << "Callback triggered : " << "MESS COMP" << std::endl;
     auto sh = static_cast<SocketHandler *>(parser->data);
     if (sh->parser_mode == REQUEST) {
-        std::cout << "Req ready!" << std::endl;
         sh->req_ready = true;
     } else if (sh->parser_mode == RESPONSE) {
-        std::cout << "Resp ready!" << std::endl;
         sh->getCacher()->setFullyLoaded(sh->req_url);
         sh->resp_ready = true;
     }
@@ -128,12 +125,10 @@ bool SocketHandler::receiveAndParseRequest() {
         return false;
     }
 
-//    req_in_process = true;
 
     req_parser->data = this;
 
 
-//    log->deb(TAG, "Parsing request, reqbuf len is " + std::to_string(recved));
     size_t nparsed = http_parser_execute(req_parser, req_settings, request_buff, recved);
     if (nparsed != recved) {
         log->err(TAG, "Error parsing request from " + std::to_string(client_socket));
@@ -151,7 +146,6 @@ bool SocketHandler::receiveAndParseRequest() {
     }
     log->deb(TAG, "Parsed req_url : " + req_url);
 
-//    log->deb(TAG, request_buff);
 
     return true;
 }
@@ -184,7 +178,6 @@ bool SocketHandler::receiveAndParseResponse() {
     }
     resp_parser->data = this;
 
-//    log->deb(TAG, "Parsing response");
     size_t nparsed = http_parser_execute(resp_parser, resp_settings, response_buff, recved);
     if (nparsed != recved) {
         log->err(TAG, "Error parsing response from " + std::to_string(server_socket) + " , cause only " +
@@ -192,14 +185,12 @@ bool SocketHandler::receiveAndParseResponse() {
                       std::to_string(resp_parser->http_errno));
         return false;
     }
-//    log->deb(TAG, "Response parsed");
 
     sendResponseChunk(response_buff, recved);
     return true;
 }
 
 bool SocketHandler::acquireHandlerType() {
-//    log->deb(TAG, "Acquiring handler type on socket " + std::to_string(client_socket));
     if (req_url.empty()) {
         log->err(TAG, "Error acquiring handler type");
         return false;
@@ -209,7 +200,6 @@ bool SocketHandler::acquireHandlerType() {
     } else {
         type = LOAD_CASHING;
     }
-//    log->deb(TAG, "Type acquired");
     return true;
 }
 
@@ -262,7 +252,7 @@ bool SocketHandler::sendRequest() {
     if (!connectToServer()) {
         return false;
     }
-    log->info(TAG,
+    log->deb(TAG,
               "Sending request from " + std::to_string(client_socket) + " to server " + std::to_string(server_socket));
     if (send(server_socket, request_full.c_str(), request_full.size(), 0) == -1) {
         log->err(TAG, "Error sending request from " + std::to_string(client_socket) + " to server " +
@@ -276,13 +266,13 @@ bool SocketHandler::sendRequest() {
 
 bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
     if (type == LOAD_TRANSIENT || type == LOAD_CASHING) {
-        log->info(TAG,
+        log->deb(TAG,
                   "Sending response chunk from "
                   + std::to_string(server_socket)
                   + " to client "
                   + std::to_string(client_socket));
     } else {
-        log->info(TAG,
+        log->deb(TAG,
                   "Sending response chunk from cache to client "
                   + std::to_string(client_socket));
     }
@@ -313,7 +303,6 @@ bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
             resp_sent = true;
         }
     }
-    log->deb(TAG, "Resp chunk sent " + std::to_string(resp_sent_bytes));
     return true;
 }
 
@@ -326,7 +315,7 @@ bool SocketHandler::sendChunkFromCache() {
     }
     if (chunk_len == 0) {
         if (cacher->isFullyLoaded(req_url)) {
-            log->info(TAG, "Client " + std::to_string(client_socket) + " has received all data from cache");
+            log->deb(TAG, "Client " + std::to_string(client_socket) + " has received all data from cache");
             resp_sent = true;
         } else {
             if (type == HEIR) {
@@ -336,7 +325,7 @@ bool SocketHandler::sendChunkFromCache() {
                                std::to_string(server_socket));
                 becomeMaster();
             } else {
-                log->info(TAG, "Client " + std::to_string(client_socket) + " is waiting for more data from cache");
+                log->deb(TAG, "Client " + std::to_string(client_socket) + " is waiting for more data from cache");
             }
         }
         return true;
@@ -355,7 +344,6 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
         return false;
     }
     if (revents & POLLIN) {
-        log->deb(TAG, "Here with server socket");
         if (sock_type == CLIENT && !req_ready) {
             parser_mode = REQUEST;
             if (!receiveAndParseRequest()) {
@@ -366,7 +354,6 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
                 log->err(TAG, "No server socket on cash handler");
                 return false;
             } else if (type == HEIR) {
-                log->deb(TAG, "Server waits until heir catches up with cache");
                 return true;
             }
             parser_mode = RESPONSE;
@@ -421,15 +408,17 @@ SocketHandler::~SocketHandler() {
 //    close(server_socket);
     if (!has_heir) {
         delete resp_parser;
+        delete parsed_url;
+        if (type == LOAD_CASHING) {
+            if (!cacher->isFullyLoaded(req_url)) {
+                cacher->deletePage(req_url);
+            }
+        }
     }
     delete resp_settings;
     delete req_parser;
     delete req_settings;
-    if (type == LOAD_CASHING && !has_heir) {
-        if (!cacher->isFullyLoaded(req_url)) {
-            cacher->deletePage(req_url);
-        }
-    }
+    delete log;
 }
 
 int SocketHandler::getServerSocket() const {

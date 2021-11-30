@@ -4,6 +4,7 @@
 
 #define TAG "proxy"
 
+
 pollfd Proxy::initializePollfd(int fd, SocketType type) {
     pollfd new_pollfd{};
     new_pollfd.fd = fd;
@@ -34,7 +35,6 @@ Proxy::Proxy(int port) : log(new Logger(Constants::DEBUG, std::cerr)), alive(tru
     } else {
         log->info(TAG, "Binded socket for proxy server");
     }
-//    poll_fds.push_back(initializePollfd(client_accepting_socket));
     insertSocket(client_accepting_socket, (sockaddr *) &addr, sizeof(addr), ACCEPTING);
     cacher = new Cacher();
     log->deb(TAG, "Casher initialized");
@@ -155,13 +155,6 @@ void Proxy::removeClient(int socket) {
     /* Пытаемся выбрать deputy, и если не получается
      * - удаляем хэндлер вместе со всеми сокетами,
      * иначе наследуем обязаности серверного хэндлера*/
-    auto it = poll_fds.begin();
-    while (it != poll_fds.end()) {
-        if (it->fd == socket) {
-            break;
-        }
-        it++;
-    }
     //TODO segfault somewhere here when terminating inherited master
     if (socketHandlers.at(socket)->getType() != CASH) {
         if(!tryChooseDeputy(socket)) {
@@ -173,8 +166,16 @@ void Proxy::removeClient(int socket) {
         }
     }
 
+    auto it = poll_fds.begin();
+    while (it != poll_fds.end()) {
+        if (it->fd == socket) {
+            break;
+        }
+        it++;
+    }
 
     poll_fds.erase(it);
+//    log->deb(TAG, "HERE");
     sockets.erase(socket);
     delete socketHandlers.at(socket);
     socketHandlers.erase(socket);
@@ -203,7 +204,7 @@ bool Proxy::tryChooseDeputy(int socket) {
         it++;
     }
     if (deputy == nullptr) {
-        log->deb(TAG, "No deputy for server socket " + it->second->getServerSocket());
+        log->deb(TAG, "No deputy for server socket " + masterHandler->getServerSocket());
         return false;
     }
     deputy->becomeHeir(masterHandler);
@@ -241,6 +242,7 @@ void Proxy::insertSocket(int new_socket, const sockaddr *sockAddr, socklen_t soc
 }
 
 Proxy::~Proxy() {
+    delete log;
     delete cacher;
     for (auto &a: sockets) {
         delete a.second;
@@ -248,6 +250,7 @@ Proxy::~Proxy() {
     for (auto &a: socketHandlers) {
         delete a.second;
     }
+    close(client_accepting_socket);
 }
 
 
