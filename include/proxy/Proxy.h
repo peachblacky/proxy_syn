@@ -15,8 +15,8 @@
 
 class Proxy {
 private:
-    Logger log;
-    Casher *casher;
+    Logger *log;
+    Cacher *cacher;
     std::vector<pollfd> poll_fds;
     std::map<int, SocketHandler *> socketHandlers;
     std::map<int, Socket *> sockets;
@@ -24,18 +24,29 @@ private:
 
     int client_accepting_socket;
 
-    static pollfd initialize_pollfd(int fd);
+    static pollfd initializePollfd(int fd, SocketType type);
 
-    void insert_socket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type);
+    void insertSocket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type);
 
-    void remove_client(int socket);
+    void removeClient(int socket);
+
+    void removeServer(int server_sock);
+
+    SocketHandler *findByServerSocket(int server_socket);
+
+    bool tryChooseDeputy(int socket);
+
+    void* SIGINTHandler(int sig);
 
 public:
-    void start_listening_mode();
+    void startListeningMode();
 
-    void try_accept_client();
+    bool tryAcceptClient();
 
     explicit Proxy(int port);
 
+    virtual ~Proxy();
+
     void launch();
+
 };

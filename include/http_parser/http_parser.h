@@ -69,19 +69,19 @@ typedef struct http_parser http_parser;
 typedef struct http_parser_settings http_parser_settings;
 
 
-/* Callbacks should return non-zero to indicate an error. The parser will
+/* Callbacks should return non-zero to indicate an error. The req_parser will
  * then halt execution.
  *
- * The one exception is on_headers_complete. In a HTTP_RESPONSE parser
- * returning '1' from on_headers_complete will tell the parser that it
+ * The one exception is on_headers_complete. In a HTTP_RESPONSE req_parser
+ * returning '1' from on_headers_complete will tell the req_parser that it
  * should not expect a body. This is used when receiving a response to a
  * HEAD request which may contain 'Content-Length' or 'Transfer-Encoding:
- * chunked' headers that indicate the presence of a body.
+ * chunked' req_headers that indicate the presence of a body.
  *
- * Returning `2` from on_headers_complete will tell parser that it should not
+ * Returning `2` from on_headers_complete will tell req_parser that it should not
  * expect neither a body nor any futher responses on this connection. This is
  * useful for handling responses to a CONNECT request which may not contain
- * `Upgrade` or `Connection: upgrade` headers.
+ * `Upgrade` or `Connection: upgrade` req_headers.
  *
  * http_data_cb does not return data chunks. It will be called arbitrarily
  * many times for each string. E.G. you might get 10 callbacks for "on_url"
@@ -276,7 +276,7 @@ enum flags
   XX(INVALID_CONSTANT, "invalid constant string")                    \
   XX(INVALID_INTERNAL_STATE, "encountered unexpected internal state")\
   XX(STRICT, "strict mode assertion failed")                         \
-  XX(PAUSED, "parser is paused")                                     \
+  XX(PAUSED, "req_parser is paused")                                     \
   XX(UNKNOWN, "an unknown error occurred")                           \
   XX(INVALID_TRANSFER_ENCODING,                                      \
      "request has invalid transfer-encoding")                        \
@@ -302,7 +302,7 @@ struct http_parser {
   unsigned int header_state : 7; /* enum header_state from http_parser.c */
   unsigned int index : 5;        /* index into current matcher */
   unsigned int uses_transfer_encoding : 1; /* Transfer-Encoding header is present */
-  unsigned int allow_chunked_length : 1; /* Allow headers with both
+  unsigned int allow_chunked_length : 1; /* Allow req_headers with both
                                           * `Content-Length` and
                                           * `Transfer-Encoding: chunked` set */
   unsigned int lenient_http_headers : 1;
@@ -319,7 +319,7 @@ struct http_parser {
   unsigned int method : 8;       /* requests only */
   unsigned int http_errno : 7;
 
-  /* 1 = Upgrade header was present and the parser has exited because of that.
+  /* 1 = Upgrade header was present and the req_parser has exited because of that.
    * 0 = No upgrade header present.
    * Should be checked when http_parser_execute() returns in addition to
    * error checking.
@@ -341,7 +341,7 @@ struct http_parser_settings {
   http_data_cb on_body;
   http_cb      on_message_complete;
   /* When on_chunk_header is called, the current chunk length is stored
-   * in parser->content_length.
+   * in req_parser->content_length.
    */
   http_cb      on_chunk_header;
   http_cb      on_chunk_complete;
@@ -398,8 +398,8 @@ void http_parser_init(http_parser *parser, enum http_parser_type type);
 void http_parser_settings_init(http_parser_settings *settings);
 
 
-/* Executes the parser. Returns number of parsed bytes. Sets
- * `parser->http_errno` on error. */
+/* Executes the req_parser. Returns number of parsed bytes. Sets
+ * `req_parser->http_errno` on error. */
 size_t http_parser_execute(http_parser *parser,
                            const http_parser_settings *settings,
                            const char *data,
@@ -434,7 +434,7 @@ int http_parser_parse_url(const char *buf, size_t buflen,
                           int is_connect,
                           struct http_parser_url *u);
 
-/* Pause or un-pause the parser; a nonzero value pauses */
+/* Pause or un-pause the req_parser; a nonzero value pauses */
 void http_parser_pause(http_parser *parser, int paused);
 
 /* Checks if this is the final chunk of the body. */

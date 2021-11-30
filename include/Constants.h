@@ -7,7 +7,7 @@
 
 class Constants{
 public:
-    static const bool DEBUG = true;
+    static const bool DEBUG = false;
 };
 
 #endif //PROXY_SYN_CONSTANTS_H
