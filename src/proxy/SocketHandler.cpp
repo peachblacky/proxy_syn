@@ -1,14 +1,7 @@
 #include <Constants.h>
 #include <sys/poll.h>
 #include "proxy/SocketHandler.h"
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <vector>
-#include <netdb.h>
-#include <cstring>
 #include <unistd.h>
-#include <http_parser/http_parser.h>
-#include <fcntl.h>
 
 #define TAG "socket_handler"
 
@@ -21,6 +14,12 @@ SocketHandler::SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pf
                                                                              Constants::DEBUG,
                                                                              std::cerr)),
                                                                      type(STANDBY),
+                                                                     req_ready(false),
+                                                                     req_sent(false),
+                                                                     resp_sent(false),
+                                                                     resp_ready(false),
+                                                                     resp_buff_capacity(BUFSIZ),
+                                                                     req_buff_capacity(BUFSIZ),
                                                                      resp_cache_position(0),
                                                                      poll_fds_ref(pfds_ref),
                                                                      sockets_ref(sockets_ref),
@@ -380,11 +379,9 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
     }
 
     if (type == CASH || type == HEIR && (revents & POLLOUT) && !resp_sent) {
-//        log->deb(TAG, "Trying to send data from cache");
         return sendChunkFromCache();
     }
 
-//    log->deb(TAG, "HERE, req_sent is " + std::to_string(req_sent) + " and resp_sent is " + std::to_string(resp_sent));
     return true;
 }
 

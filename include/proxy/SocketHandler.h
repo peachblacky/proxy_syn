@@ -27,15 +27,15 @@ private:
     int server_socket;
     std::vector<pollfd> &poll_fds_ref;
     std::map<int, Socket *> &sockets_ref;
-    SocketHandler* ancestor = nullptr;
+    SocketHandler* ancestor;
 
     //Request itself
-    static const ssize_t req_buff_capacity = BUFSIZ;
+    static const ssize_t req_buff_capacity;
     std::string request_full;
     ssize_t req_sent_bytes;
 
     //Response itself
-    static const ssize_t resp_buff_capacity = BUFSIZ;
+    static const ssize_t resp_buff_capacity;
     size_t resp_cache_position;
 
     //buffer for parsing req_headers
@@ -59,12 +59,12 @@ private:
     bool last_was_value;
 
     //Request states
-    bool req_ready = false;
-    bool req_sent = false;
+    bool req_ready;
+    bool req_sent;
 
     //Response states
-    bool resp_ready = false;
-    bool resp_sent = false;
+    bool resp_ready;
+    bool resp_sent;
 
     //Other states
     bool connected_to_server_this_turn;

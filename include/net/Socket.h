@@ -15,12 +15,10 @@ class Socket {
 public:
     Socket(int sockfd, const sockaddr *sockAddr, socklen_t sockLen, SocketType type);
 
-    virtual ~Socket() = default;
-
-    const int sockfd;
+    const int sockfd = -1;
     const sockaddr *sockAddr;
-    const socklen_t sockLen;
-    const SocketType type;
+    const socklen_t sockLen = 0;
+    const SocketType type = SocketType ::CLIENT;
 };
 
 #endif //PROXY_SYN_SOCKET_H
