@@ -7,7 +7,7 @@
 #include <logger.hpp>
 #include <vector>
 
-enum class CacheReturn {
+enum CacheReturn {
     PageNotFound,
     NotEnoughSpace,
     OtherError,

@@ -1,7 +1,7 @@
 set(HEADERS_LIST
         "${proxy_syn_SOURCE_DIR}/include/proxy/Proxy.h"
-        "${proxy_syn_SOURCE_DIR}/include/Casher/Casher.h"
-        "${proxy_syn_SOURCE_DIR}/include/Logger.hpp"
+        "${proxy_syn_SOURCE_DIR}/include/casher/Casher.h"
+        "${proxy_syn_SOURCE_DIR}/include/logger.hpp"
         "${proxy_syn_SOURCE_DIR}/include/http_parser/http_parser.h"
         logger.cpp
         ../include/Constants.h

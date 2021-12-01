@@ -49,20 +49,6 @@ void Proxy::startListeningMode() {
 }
 
 bool Proxy::tryAcceptClient() {
-    int flags_bu = fcntl(client_accepting_socket, F_GETFL);
-    if (flags_bu == -1) {
-        log->err(TAG, "Failed to get listening socket flags");
-        exit(EXIT_FAILURE);
-    } else {
-        log->deb(TAG, "Got listening socket flags");
-    }
-    if (fcntl(client_accepting_socket, F_SETFL, flags_bu | O_NONBLOCK) == -1) {
-        log->err(TAG, "Failed to set listening socket non-block");
-        exit(EXIT_FAILURE);
-    } else {
-        log->deb(TAG, "Listening socket set non-block");
-    }
-
     auto addr = new sockaddr;
     socklen_t addr_len;
 
@@ -74,13 +60,6 @@ bool Proxy::tryAcceptClient() {
         log->info(TAG, "Accepted new client on socket " + std::to_string(new_client));
         insertSocket(new_client, addr, addr_len, CLIENT);
     }
-
-    if (fcntl(client_accepting_socket, F_SETFL, flags_bu) == -1) {
-        log->err(TAG, "Failed to backup listening socket");
-        exit(EXIT_FAILURE);
-    } else {
-        log->deb(TAG, "Listening socket backed-up successfully");
-    }
     return true;
 
 
@@ -90,7 +69,6 @@ SocketHandler *Proxy::findByServerSocket(int server_socket) {
     auto it = socketHandlers.begin();
     while (it != socketHandlers.end()) {
         if (it->second->getServerSocket() == server_socket) {
-//            log->deb(TAG, "Found handler for server " + std::to_string(server_socket));
             return it->second;
         }
         it++;
@@ -102,7 +80,6 @@ SocketHandler *Proxy::findByServerSocket(int server_socket) {
 void Proxy::launch() {
     int poll_return = 0;
     while (alive) {
-        //TODO mb make a separate function for poll-handling
         poll_return = poll(poll_fds.data(), poll_fds.size(), -1);
         if (poll_return == -1) {
             break;
@@ -125,6 +102,9 @@ void Proxy::launch() {
                     }
                     poll_fd.revents = 0;
                 } else if (cur_sock->type == ACCEPTING) {
+                    if(poll_fd.revents & (POLLERR | POLLHUP)) {
+                        break;
+                    }
                     if (poll_fd.revents & POLLIN) {
                         if (tryAcceptClient()) {
                             break;
@@ -137,13 +117,14 @@ void Proxy::launch() {
                         break;
                     } else {
                         if (!found_handler->work(poll_fd.revents, SERVER)) {
-                            //TODO move it to separate function
-                            removeServer(poll_fd.fd);
-//                            removeClient(found_handler->getClientSocket());
+
+//                            removeServer(poll_fd.fd);
+                            removeClient(found_handler->getClientSocket());
                             break;
                         }
                     }
                 }
+                poll_fd.revents = 0;
             }
         }
     }
@@ -155,7 +136,6 @@ void Proxy::removeClient(int socket) {
     /* Пытаемся выбрать deputy, и если не получается
      * - удаляем хэндлер вместе со всеми сокетами,
      * иначе наследуем обязаности серверного хэндлера*/
-    //TODO segfault somewhere here when terminating inherited master
     if (socketHandlers.at(socket)->getType() != CASH) {
         if(!tryChooseDeputy(socket)) {
             removeServer(socketHandlers.at(socket)->getServerSocket());
@@ -175,7 +155,6 @@ void Proxy::removeClient(int socket) {
     }
 
     poll_fds.erase(it);
-//    log->deb(TAG, "HERE");
     sockets.erase(socket);
     delete socketHandlers.at(socket);
     socketHandlers.erase(socket);
@@ -213,7 +192,6 @@ bool Proxy::tryChooseDeputy(int socket) {
 }
 
 void Proxy::removeServer(int server_sock) {
-//    log->deb(TAG, "Disconnecting server");
     auto it = poll_fds.begin();
     while (it != poll_fds.end()) {
         if (it->fd == server_sock) {
@@ -233,7 +211,6 @@ void Proxy::removeServer(int server_sock) {
 
 void Proxy::insertSocket(int new_socket, const sockaddr *sockAddr, socklen_t sockLen, SocketType type) {
     poll_fds.push_back(initializePollfd(new_socket, type));
-//    log->deb(TAG, "Pushed " + std::to_string(new_socket) + " to pollfd vector");
     auto sock = new Socket(new_socket, sockAddr, sockLen, type);
     sockets.insert(std::pair<int, Socket *>(new_socket, sock));
     socketHandlers.insert(

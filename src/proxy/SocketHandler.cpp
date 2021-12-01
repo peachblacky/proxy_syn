@@ -18,12 +18,12 @@ SocketHandler::SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pf
                                                                      req_sent(false),
                                                                      resp_sent(false),
                                                                      resp_ready(false),
-                                                                     resp_buff_capacity(BUFSIZ),
-                                                                     req_buff_capacity(BUFSIZ),
+                                                                     has_heir(false),
+                                                                     last_was_value(false),
+                                                                     connected_to_server_this_turn(false),
                                                                      resp_cache_position(0),
                                                                      poll_fds_ref(pfds_ref),
-                                                                     sockets_ref(sockets_ref),
-                                                                     req_sent_bytes(0) {
+                                                                     sockets_ref(sockets_ref) {
     initResponseParser();
     initRequestParser();
     sigset(SIGPIPE, SIG_IGN);
@@ -185,8 +185,7 @@ bool SocketHandler::receiveAndParseResponse() {
         return false;
     }
 
-    sendResponseChunk(response_buff, recved);
-    return true;
+    return sendResponseChunk(response_buff, recved);
 }
 
 bool SocketHandler::acquireHandlerType() {
@@ -252,7 +251,7 @@ bool SocketHandler::sendRequest() {
         return false;
     }
     log->deb(TAG,
-              "Sending request from " + std::to_string(client_socket) + " to server " + std::to_string(server_socket));
+             "Sending request from " + std::to_string(client_socket) + " to server " + std::to_string(server_socket));
     if (send(server_socket, request_full.c_str(), request_full.size(), 0) == -1) {
         log->err(TAG, "Error sending request from " + std::to_string(client_socket) + " to server " +
                       std::to_string(server_socket));
@@ -266,14 +265,14 @@ bool SocketHandler::sendRequest() {
 bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
     if (type == LOAD_TRANSIENT || type == LOAD_CASHING) {
         log->deb(TAG,
-                  "Sending response chunk from "
-                  + std::to_string(server_socket)
-                  + " to client "
-                  + std::to_string(client_socket));
+                 "Sending response chunk from "
+                 + std::to_string(server_socket)
+                 + " to client "
+                 + std::to_string(client_socket));
     } else {
         log->deb(TAG,
-                  "Sending response chunk from cache to client "
-                  + std::to_string(client_socket));
+                 "Sending response chunk from cache to client "
+                 + std::to_string(client_socket));
     }
     ssize_t resp_sent_bytes = 0;
     unsigned long left_to_send = len;
@@ -283,8 +282,8 @@ bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
                          resp_buff_capacity * (left_to_send / resp_buff_capacity) : left_to_send;
         ssize_t sent = send(client_socket, buffer + resp_sent_bytes, amount_to_send, 0);
         if (sent == -1) {
-            log->err(TAG, "Error sending data from " + std::to_string(client_socket) + " to server " +
-                          std::to_string(server_socket));
+            log->err(TAG, "Error sending data from to client " +
+                          std::to_string(client_socket));
             log->deb(TAG, "errno is " + std::to_string(errno));
             return false;
         }
@@ -387,7 +386,6 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
 
 void SocketHandler::becomeHeir(SocketHandler *newAncestor) {
     type = HEIR;
-    ancestor = newAncestor;
     server_socket = newAncestor->server_socket;
     req_url = newAncestor->req_url;
     resp_parser = newAncestor->resp_parser;
@@ -445,6 +443,10 @@ const std::string &SocketHandler::getReqUrl() const {
 
 void SocketHandler::setHasHeir(bool hasHeir) {
     has_heir = hasHeir;
+}
+
+int SocketHandler::getClientSocket() const {
+    return client_socket;
 }
 
 

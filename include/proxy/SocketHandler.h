@@ -27,15 +27,13 @@ private:
     int server_socket;
     std::vector<pollfd> &poll_fds_ref;
     std::map<int, Socket *> &sockets_ref;
-    SocketHandler* ancestor;
 
     //Request itself
-    static const ssize_t req_buff_capacity;
+    static const ssize_t req_buff_capacity = BUFSIZ;
     std::string request_full;
-    ssize_t req_sent_bytes;
 
     //Response itself
-    static const ssize_t resp_buff_capacity;
+    static const ssize_t resp_buff_capacity = BUFSIZ;
     size_t resp_cache_position;
 
     //buffer for parsing req_headers
@@ -45,7 +43,6 @@ private:
     //Parsed request of client
     std::string req_url;
     std::map<std::string, std::string> req_headers;
-    std::string req_body;
 
 
     //Parsed response of server
@@ -71,11 +68,11 @@ private:
     bool has_heir;
 
     //Parser
-    http_parser *resp_parser{};
-    http_parser_settings *resp_settings{};
-    http_parser *req_parser{};
-    http_parser_settings *req_settings{};
-    http_parser_url *parsed_url{};
+    http_parser *resp_parser;
+    http_parser_settings *resp_settings;
+    http_parser *req_parser;
+    http_parser_settings *req_settings;
+    http_parser_url *parsed_url;
     ParserMode parser_mode;
 
     static int urlCallback(http_parser *parser, const char *at, size_t length);
@@ -128,4 +125,6 @@ public:
     void setHasHeir(bool hasHeir);
 
     Cacher *getCacher() const;
+
+    int getClientSocket() const;
 };
