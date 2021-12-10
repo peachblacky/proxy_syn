@@ -15,21 +15,23 @@ enum CacheReturn {
     OK
 };
 
-#define CACHE_CHUNK_SIZE 8192
+#define CACHE_CHUNK_SIZE (1024 * 8)
 
 class CachedPage {
 private:
     Logger *log;
     bool fully_loaded;
-    std::vector<char> page;
+    size_t cur_chunk_position;
+//    std::vector<char> page;
+    std::vector<std::vector<char>* > page_chunked;
 
-    bool isFullyLoaded() const;
+    [[nodiscard]] bool isFullyLoaded() const;
 
     size_t pageSize();
 
     CacheReturn appendPage(char *buffer, size_t len);
 
-    CacheReturn acquireDataChunk(char *buffer, size_t &len, size_t position);
+    CacheReturn acquireDataChunk(char **buffer, size_t &len, size_t position);
 
     CacheReturn setFullyLoaded();
 

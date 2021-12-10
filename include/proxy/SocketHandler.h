@@ -33,7 +33,7 @@ private:
     std::string request_full;
 
     //Response itself
-    static const ssize_t resp_buff_capacity = BUFSIZ;
+    static const ssize_t resp_buff_capacity = (1024 * 8);
     size_t resp_cache_position;
 
     //buffer for parsing req_headers
@@ -75,6 +75,7 @@ private:
     http_parser_url *parsed_url;
     ParserMode parser_mode;
 
+
     static int urlCallback(http_parser *parser, const char *at, size_t length);
 
     static int headerFieldCallback(http_parser *parser, const char *at, size_t length);
@@ -88,6 +89,8 @@ private:
     void initResponseParser();
 
     bool receiveAndParseRequest();
+
+    bool isMethodSupported();
 
     bool receiveAndParseResponse();
 
@@ -104,6 +107,7 @@ private:
     void becomeMaster();
 
 public:
+
     SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pfds_ref, std::map<int, Socket *> &sockets_ref);
 
     bool work(short revents, SocketType sock_type);

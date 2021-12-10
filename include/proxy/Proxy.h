@@ -36,9 +36,12 @@ private:
 
     bool tryChooseDeputy(int socket);
 
-    void* SIGINTHandler(int sig);
+    void dropRevents();
 
 public:
+    //debug
+    int cycle_counter = 0;
+
     void startListeningMode();
 
     bool tryAcceptClient();

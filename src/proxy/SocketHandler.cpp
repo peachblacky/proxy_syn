@@ -145,7 +145,17 @@ bool SocketHandler::receiveAndParseRequest() {
     }
     log->deb(TAG, "Parsed req_url : " + req_url);
 
+    if(req_ready) {
+        return isMethodSupported();
+    }
 
+    return true;
+}
+
+bool SocketHandler::isMethodSupported() {
+    if(req_parser->method != HTTP_HEAD && req_parser->method != HTTP_GET) {
+        return false;
+    }
     return true;
 }
 
@@ -175,6 +185,8 @@ bool SocketHandler::receiveAndParseResponse() {
             return false;
         }
     }
+
+
     resp_parser->data = this;
 
     size_t nparsed = http_parser_execute(resp_parser, resp_settings, response_buff, recved);
@@ -184,7 +196,6 @@ bool SocketHandler::receiveAndParseResponse() {
                       std::to_string(resp_parser->http_errno));
         return false;
     }
-
     return sendResponseChunk(response_buff, recved);
 }
 
@@ -232,7 +243,7 @@ bool SocketHandler::connectToServer() {
             server_socket = sock;
             pollfd new_pollfd{};
             new_pollfd.fd = sock;
-            new_pollfd.events = POLLIN | POLLOUT;
+            new_pollfd.events = POLLIN;
             poll_fds_ref.push_back(new_pollfd);
             log->deb(TAG, "Pushed new server " + std::to_string(new_pollfd.fd) + " to pollfd vector");
             auto socket_wrap = new Socket(sock, aip->ai_addr, aip->ai_addrlen, SERVER);
@@ -333,6 +344,7 @@ bool SocketHandler::sendChunkFromCache() {
 }
 
 bool SocketHandler::work(short revents, SocketType sock_type) {
+
     connected_to_server_this_turn = false;
     if (resp_sent && req_sent) {
         return false;
@@ -356,10 +368,10 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
             }
             parser_mode = RESPONSE;
             log->deb(TAG, "Receiving response");
-            if (!receiveAndParseResponse()) {
-                return false;
-            }
+            return receiveAndParseResponse();
         }
+    } else {
+        log->info(TAG, "NO POLLIN, received " + std::to_string(revents));
     }
 
     if (req_ready && !req_sent) {
@@ -380,7 +392,6 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
     if (type == CASH || type == HEIR && (revents & POLLOUT) && !resp_sent) {
         return sendChunkFromCache();
     }
-
     return true;
 }
 

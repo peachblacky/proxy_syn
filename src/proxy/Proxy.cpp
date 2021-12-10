@@ -11,7 +11,7 @@ pollfd Proxy::initializePollfd(int fd, SocketType type) {
     if (type == ACCEPTING) {
         new_pollfd.events = POLLIN;
     } else {
-        new_pollfd.events = POLLIN | POLLOUT;
+        new_pollfd.events = POLLIN;
     }
     return new_pollfd;
 }
@@ -50,7 +50,7 @@ void Proxy::startListeningMode() {
 
 bool Proxy::tryAcceptClient() {
     auto addr = new sockaddr;
-    socklen_t addr_len;
+    socklen_t addr_len = sizeof(addr);
 
     int new_client = accept(client_accepting_socket, addr, &addr_len);
     if (new_client == -1) {
@@ -77,6 +77,12 @@ SocketHandler *Proxy::findByServerSocket(int server_socket) {
     return nullptr;
 }
 
+void Proxy::dropRevents() {
+    for(auto &poll_fd: poll_fds) {
+        poll_fd.revents = 0;
+    }
+}
+
 void Proxy::launch() {
     int poll_return = 0;
     while (alive) {
@@ -85,6 +91,9 @@ void Proxy::launch() {
             break;
         } else {
             for (auto &poll_fd: poll_fds) {
+                if(poll_fd.revents == 0) {
+                    continue;
+                }
                 auto find_result = sockets.find(poll_fd.fd);
                 if (find_result == sockets.end()) {
                     log->err(TAG, "Socket " + std::to_string(poll_fd.fd) + " not found");
@@ -94,31 +103,34 @@ void Proxy::launch() {
                 if (cur_sock->type == CLIENT) {
                     auto foundHandler = socketHandlers.at(poll_fd.fd);
                     if (!foundHandler->work(poll_fd.revents, CLIENT)) {
+                        dropRevents();
                         removeClient(poll_fd.fd);
                         break;
                     }
                     if (foundHandler->isConnectedToServerThisTurn()) {
+                        dropRevents();
                         break;
                     }
-                    poll_fd.revents = 0;
                 } else if (cur_sock->type == ACCEPTING) {
                     if(poll_fd.revents & (POLLERR | POLLHUP)) {
+                        dropRevents();
                         break;
                     }
                     if (poll_fd.revents & POLLIN) {
                         if (tryAcceptClient()) {
+                            dropRevents();
                             break;
                         }
                     }
                 } else if (cur_sock->type == SERVER) {
                     SocketHandler *found_handler = findByServerSocket(poll_fd.fd);
                     if (found_handler == nullptr) {
+                        dropRevents();
                         removeServer(poll_fd.fd);
                         break;
                     } else {
                         if (!found_handler->work(poll_fd.revents, SERVER)) {
-
-//                            removeServer(poll_fd.fd);
+                            dropRevents();
                             removeClient(found_handler->getClientSocket());
                             break;
                         }
@@ -172,7 +184,6 @@ bool Proxy::tryChooseDeputy(int socket) {
         return false;
     }
     SocketHandler *deputy = nullptr;
-//    log->deb(TAG, "Choosing dep");
     while (it != socketHandlers.end()) {
         if (it->second->getType() == CASH) {
             if (it->second->getReqUrl() == masterHandler->getReqUrl()
