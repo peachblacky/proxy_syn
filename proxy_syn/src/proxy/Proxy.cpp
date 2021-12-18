@@ -55,6 +55,7 @@ bool Proxy::tryAcceptClient() {
     int new_client = accept(client_accepting_socket, addr, &addr_len);
     if (new_client == -1) {
         log->err(TAG, "Failed to accept new client " + std::to_string(errno));
+        delete addr;
         return false;
     } else {
         log->info(TAG, "Accepted new client on socket " + std::to_string(new_client));
@@ -97,7 +98,7 @@ void Proxy::launch() {
                 auto find_result = sockets.find(poll_fd.fd);
                 if (find_result == sockets.end()) {
                     log->err(TAG, "Socket " + std::to_string(poll_fd.fd) + " not found");
-                    exit(EXIT_FAILURE);
+                    return;
                 }
                 Socket *cur_sock = (*find_result).second;
                 if (cur_sock->type == CLIENT) {
@@ -110,6 +111,9 @@ void Proxy::launch() {
                     if (foundHandler->isConnectedToServerThisTurn()) {
                         dropRevents();
                         break;
+                    }
+                    if(foundHandler->getType() == CASH) {
+                        poll_fd.events |= POLLOUT;
                     }
                 } else if (cur_sock->type == ACCEPTING) {
                     if(poll_fd.revents & (POLLERR | POLLHUP)) {

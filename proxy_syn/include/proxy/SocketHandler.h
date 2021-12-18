@@ -6,6 +6,7 @@
 #include <vector>
 #include <net/Socket.h>
 #include <strings.h>
+#include <string.h>
 #include <signal.h>
 
 enum HandlerType {
@@ -33,8 +34,11 @@ private:
     std::string request_full;
 
     //Response itself
-    static const ssize_t resp_buff_capacity = (1024 * 8);
+    static const ssize_t resp_buff_capacity = (1024 * 16);
     size_t resp_cache_position;
+    char* sticky_resp_buffer;
+    size_t sticky_resp_buffer_size;
+    char* extended_sending_buf;
 
     //buffer for parsing req_headers
     std::string cur_header_field;
@@ -68,11 +72,11 @@ private:
     bool has_heir;
 
     //Parser
-    http_parser *resp_parser;
-    http_parser_settings *resp_settings;
-    http_parser *req_parser;
-    http_parser_settings *req_settings;
-    http_parser_url *parsed_url;
+    http_parser resp_parser;
+    http_parser_settings resp_settings;
+    http_parser req_parser;
+    http_parser_settings req_settings;
+    http_parser_url parsed_url;
     ParserMode parser_mode;
 
 

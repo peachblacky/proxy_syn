@@ -60,16 +60,17 @@ size_t Cacher::getChunkSize() {
 }
 
 
-CacheReturn Cacher::acquireChunk(char *buf, size_t &len, const std::string &url, size_t position) {
+char* Cacher::acquireChunk(size_t &len, const std::string &url, size_t position) {
     auto find_result = pages.find(url);
     if (find_result == pages.end()) {
-        return CacheReturn::PageNotFound;
+        return nullptr;
     }
     auto found_page = find_result->second;
     if (position > found_page->pageSize()) {
-        return CacheReturn::InvalidPosition;
+        return nullptr;
     }
-    return found_page->acquireDataChunk(&buf, len, position);
+    char* buf =  found_page->acquireDataChunk(len, position);
+    return buf;
 }
 
 void Cacher::deletePage(const std::string &url) {
@@ -143,10 +144,10 @@ CacheReturn CachedPage::appendPage(char *buffer, size_t len) {
 }
 
 
-CacheReturn CachedPage::acquireDataChunk(char **buffer, size_t &len, size_t position) {
+char* CachedPage::acquireDataChunk(size_t &len, size_t position) {
     auto page_size = pageSize();
     if (position > page_size) {
-        return CacheReturn::InvalidPosition;
+        return nullptr;
     }
     log->deb(TAGP, std::to_string(position) + " and " + std::to_string(page_size));
     log->deb(TAGP, "Vector size is " + std::to_string(page_chunked.size()));
@@ -155,10 +156,8 @@ CacheReturn CachedPage::acquireDataChunk(char **buffer, size_t &len, size_t posi
     auto chunk_position = position % CACHE_CHUNK_SIZE;
     len = position_chunk->size() - chunk_position;
     log->deb(TAGP, "LEN IS " + std::to_string(len));
-    for (size_t i = 0; i < len; i++) {
-        (*buffer)[i] = position_chunk->at(i + chunk_position);
-    }
-    return CacheReturn::OK;
+    char *buffer = position_chunk->data() + chunk_position;
+    return buffer;
 }
 
 CachedPage::~CachedPage() {

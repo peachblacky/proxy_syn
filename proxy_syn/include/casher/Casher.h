@@ -15,7 +15,7 @@ enum CacheReturn {
     OK
 };
 
-#define CACHE_CHUNK_SIZE (1024 * 8)
+#define CACHE_CHUNK_SIZE (1024 * 16)
 
 class CachedPage {
 private:
@@ -31,7 +31,7 @@ private:
 
     CacheReturn appendPage(char *buffer, size_t len);
 
-    CacheReturn acquireDataChunk(char **buffer, size_t &len, size_t position);
+    char* acquireDataChunk(size_t &len, size_t position);
 
     CacheReturn setFullyLoaded();
 
@@ -57,7 +57,7 @@ public:
 
     CacheReturn setFullyLoaded(const std::string &url);
 
-    CacheReturn acquireChunk(char *buf, size_t &len, const std::string &url, size_t position);
+    char* acquireChunk(size_t &len, const std::string &url, size_t position);
 
     void deletePage(const std::string &url);
 

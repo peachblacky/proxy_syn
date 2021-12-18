@@ -24,33 +24,36 @@ SocketHandler::SocketHandler(int sockfd, Cacher *casher, std::vector<pollfd> &pf
                                                                      resp_cache_position(0),
                                                                      poll_fds_ref(pfds_ref),
                                                                      sockets_ref(sockets_ref) {
+    sticky_resp_buffer_size = 0;
+    sticky_resp_buffer = new char[resp_buff_capacity];
+    extended_sending_buf = new char[resp_buff_capacity * 2];
     initResponseParser();
     initRequestParser();
     sigset(SIGPIPE, SIG_IGN);
 }
 
 void SocketHandler::initRequestParser() {
-    req_settings = new http_parser_settings;
-    http_parser_settings_init(req_settings);
-    req_settings->on_url = urlCallback;
-    req_settings->on_header_field = headerFieldCallback;
-    req_settings->on_header_value = headerValueCallback;
-    req_settings->on_message_complete = messageCompleteCallback;
+    req_settings = http_parser_settings();
+    http_parser_settings_init(&req_settings);
+    req_settings.on_url = urlCallback;
+    req_settings.on_header_field = headerFieldCallback;
+    req_settings.on_header_value = headerValueCallback;
+    req_settings.on_message_complete = messageCompleteCallback;
     cur_header_field.clear();
     cur_header_value.clear();
     last_was_value = false;
 
-    req_parser = static_cast<http_parser *>(malloc(sizeof(http_parser)));
-    http_parser_init(req_parser, HTTP_REQUEST);
+    req_parser = http_parser();
+    http_parser_init(&req_parser, HTTP_REQUEST);
 }
 
 void SocketHandler::initResponseParser() {
-    resp_settings = new http_parser_settings;
-    http_parser_settings_init(resp_settings);
-    resp_settings->on_message_complete = messageCompleteCallback;
+    resp_settings = http_parser_settings();
+    http_parser_settings_init(&resp_settings);
+    resp_settings.on_message_complete = messageCompleteCallback;
 
-    resp_parser = static_cast<http_parser *>(malloc(sizeof(http_parser)));
-    http_parser_init(resp_parser, HTTP_RESPONSE);
+    resp_parser = http_parser();
+    http_parser_init(&resp_parser, HTTP_RESPONSE);
 }
 
 int SocketHandler::urlCallback(http_parser *parser, const char *at, size_t length) {
@@ -125,10 +128,10 @@ bool SocketHandler::receiveAndParseRequest() {
     }
 
 
-    req_parser->data = this;
+    req_parser.data = this;
 
 
-    size_t nparsed = http_parser_execute(req_parser, req_settings, request_buff, recved);
+    size_t nparsed = http_parser_execute(&req_parser, &req_settings, request_buff, recved);
     if (nparsed != recved) {
         log->err(TAG, "Error parsing request from " + std::to_string(client_socket));
         return false;
@@ -136,10 +139,10 @@ bool SocketHandler::receiveAndParseRequest() {
 
     request_full.append(request_buff, recved);
 
-    parsed_url = new http_parser_url;
-    http_parser_url_init(parsed_url);
+    parsed_url = http_parser_url();
+    http_parser_url_init(&parsed_url);
     log->deb(TAG, "Parsing req_url : " + req_url);
-    if (http_parser_parse_url(req_url.data(), req_url.length(), 0, parsed_url)) {
+    if (http_parser_parse_url(req_url.data(), req_url.length(), 0, &parsed_url)) {
         log->err(TAG, "Error parsing req_url in request from " + std::to_string(client_socket));
         return false;
     }
@@ -153,7 +156,7 @@ bool SocketHandler::receiveAndParseRequest() {
 }
 
 bool SocketHandler::isMethodSupported() {
-    if(req_parser->method != HTTP_HEAD && req_parser->method != HTTP_GET) {
+    if(req_parser.method != HTTP_HEAD && req_parser.method != HTTP_GET) {
         return false;
     }
     return true;
@@ -187,13 +190,13 @@ bool SocketHandler::receiveAndParseResponse() {
     }
 
 
-    resp_parser->data = this;
+    resp_parser.data = this;
 
-    size_t nparsed = http_parser_execute(resp_parser, resp_settings, response_buff, recved);
+    size_t nparsed = http_parser_execute(&resp_parser, &resp_settings, response_buff, recved);
     if (nparsed != recved) {
         log->err(TAG, "Error parsing response from " + std::to_string(server_socket) + " , cause only " +
                       std::to_string(nparsed) + " was parsed.\n" + "Errno is " +
-                      std::to_string(resp_parser->http_errno));
+                      std::to_string(resp_parser.http_errno));
         return false;
     }
     return sendResponseChunk(response_buff, recved);
@@ -220,7 +223,7 @@ bool SocketHandler::connectToServer() {
     hint.ai_family = PF_UNSPEC;
 
     std::string url_host;
-    url_host.append(req_url, parsed_url->field_data[1].off, parsed_url->field_data[1].len);
+    url_host.append(req_url, parsed_url.field_data[1].off, parsed_url.field_data[1].len);
 
 
     log->deb(TAG, "Trying getting addr of server on req_url " + url_host);
@@ -285,13 +288,33 @@ bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
                  "Sending response chunk from cache to client "
                  + std::to_string(client_socket));
     }
+    char* sending_buf;
+    if(sticky_resp_buffer_size > 0) {
+        bzero(extended_sending_buf, resp_buff_capacity * 2);
+        memcpy(extended_sending_buf, sticky_resp_buffer, sticky_resp_buffer_size);
+        memcpy(extended_sending_buf + sticky_resp_buffer_size, buffer, len);
+        sending_buf = extended_sending_buf;
+    } else {
+        sending_buf = buffer;
+    }
     ssize_t resp_sent_bytes = 0;
-    unsigned long left_to_send = len;
-    unsigned long amount_to_send = 0;
-    while (left_to_send > 0) {
+    unsigned long left_to_send = len + sticky_resp_buffer_size;
+    unsigned long amount_to_send;
+
+    ssize_t sending_boundary;
+    if (type == CASH) {
+        sending_boundary = 0;
+    } else {
+        if (resp_ready) {
+            sending_boundary = 0;
+        } else {
+            sending_boundary = resp_buff_capacity - 1;
+        }
+    }
+    while (left_to_send > sending_boundary) {
         amount_to_send = left_to_send > resp_buff_capacity ?
                          resp_buff_capacity * (left_to_send / resp_buff_capacity) : left_to_send;
-        ssize_t sent = send(client_socket, buffer + resp_sent_bytes, amount_to_send, 0);
+        ssize_t sent = send(client_socket, sending_buf + resp_sent_bytes, amount_to_send, 0);
         if (sent == -1) {
             log->err(TAG, "Error sending data from to client " +
                           std::to_string(client_socket));
@@ -300,6 +323,14 @@ bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
         }
         resp_sent_bytes += sent;
         left_to_send -= sent;
+    }
+
+    if(left_to_send != 0) {
+        memcpy(sticky_resp_buffer, sending_buf + resp_sent_bytes, left_to_send);
+        sticky_resp_buffer_size = left_to_send;
+    } else {
+        bzero(sticky_resp_buffer, resp_buff_capacity);
+        sticky_resp_buffer_size = 0;
     }
     if (type == CASH) {
         if (len < CACHE_CHUNK_SIZE && resp_ready) {
@@ -316,10 +347,10 @@ bool SocketHandler::sendResponseChunk(char *buffer, size_t len) {
 }
 
 bool SocketHandler::sendChunkFromCache() {
-    char chunk_buf[Cacher::getChunkSize()];
+    char* chunk_buf;
     size_t chunk_len = 0;
-    auto ret = cacher->acquireChunk(chunk_buf, chunk_len, req_url, resp_cache_position);
-    if (ret != CacheReturn::OK) {
+    chunk_buf = cacher->acquireChunk(chunk_len, req_url, resp_cache_position);
+    if (chunk_buf == nullptr) {
         return false;
     }
     if (chunk_len == 0) {
@@ -340,6 +371,11 @@ bool SocketHandler::sendChunkFromCache() {
         return true;
     }
     resp_cache_position += chunk_len;
+    if(chunk_len < CACHE_CHUNK_SIZE) {
+        if (cacher->isFullyLoaded(req_url)) {
+            resp_ready = true;
+        }
+    }
     return sendResponseChunk(chunk_buf, chunk_len);
 }
 
@@ -370,8 +406,6 @@ bool SocketHandler::work(short revents, SocketType sock_type) {
             log->deb(TAG, "Receiving response");
             return receiveAndParseResponse();
         }
-    } else {
-        log->info(TAG, "NO POLLIN, received " + std::to_string(revents));
     }
 
     if (req_ready && !req_sent) {
@@ -411,19 +445,15 @@ void SocketHandler::becomeMaster() {
 SocketHandler::~SocketHandler() {
     log->err(TAG, "Handler for " + std::to_string(client_socket) + " terminates");
     close(client_socket);
-//    close(server_socket);
     if (!has_heir) {
-        delete resp_parser;
-        delete parsed_url;
         if (type == LOAD_CASHING) {
             if (!cacher->isFullyLoaded(req_url)) {
                 cacher->deletePage(req_url);
             }
         }
     }
-    delete resp_settings;
-    delete req_parser;
-    delete req_settings;
+    delete sticky_resp_buffer;
+    delete extended_sending_buf;
     delete log;
 }
 
